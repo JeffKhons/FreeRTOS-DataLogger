@@ -6,21 +6,21 @@
 CC = gcc
 
 # 定義編譯參數 (CFLAGS)
-# -Wall: 開啟所有警告，抓 Bug 必備
+# -Wall: 開啟所有警告
 # -g: 加入除錯資訊 (方便未來用 GDB)
 # -I: 告訴編譯器要去哪裡找 .h 檔
 CFLAGS = -Wall -g -Icore/inc -Iapp/inc
 
-# 定義要編譯的原始碼檔案 (未來有新的 .c 檔就加這裡)
+# 定義要編譯的原始碼檔案
 SRCS = test.c \
        app/src/ring_buffer.c \
        app/src/cli_task.c
 
-# 自動將 .c 替換成 .o (目的檔)
+# 將 .c 替換成 .o (目的檔)
 OBJS = $(SRCS:.c=.o)
 
 # 最終輸出的執行檔名稱
-TARGET = test_app.exe
+TARGET = test.exe
 
 # ==========================================
 # 編譯規則

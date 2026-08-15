@@ -2,64 +2,87 @@
 #include <string.h>
 #include "cli_task.h"
 
-#define MAX_CMD_LEN 64 // 限制單行指令最大長度，防止記憶體溢位
+#define MAX_CMD_LEN 64
 
 static char cmd_buffer[MAX_CMD_LEN];
 static uint8_t cmd_index = 0;
+
+/* 1. 先宣告函式指標型態與具體 Handler 函式 (前置宣告) */
+typedef void (*CLI_CmdHandler_t)(char *args);
+
+static void Cmd_Help(char *args);
+static void Cmd_Dump(char *args);
+static void Cmd_Read(char *args);
+
+/* 2. 建立指令轉發查表 (Command Routing Table) */
+typedef struct {
+    const char *cmd_name;
+    CLI_CmdHandler_t handler;
+    const char *help_text;
+} CLI_Command_t;
+
+static const CLI_Command_t cli_cmd_table[] = {
+    {"help", Cmd_Help, "顯示此系統指令選單"},
+    {"dump", Cmd_Dump, "印出 Flash 歷史日誌"},
+    {"read", Cmd_Read, "讀取系統狀態 (支援參數: temp)"},
+};
+
+static const int NUM_CMDS = sizeof(cli_cmd_table) / sizeof(cli_cmd_table[0]);
+
+/* 3. 真正實作各個 Handler 函式 */
+static void Cmd_Help(char *args) {
+    printf("\n--- 車內監控系統指令選單 ---\n");
+    for (int i = 0; i < NUM_CMDS; i++) {
+        printf("  %-10s : %s\n", cli_cmd_table[i].cmd_name, cli_cmd_table[i].help_text);
+    }
+    printf("----------------------------\n");
+}
+
+static void Cmd_Dump(char *args) {
+    printf("[Storage] 正在從 SPI Flash (W25Q64) 撈取歷史日誌...\n");
+}
+
+static void Cmd_Read(char *args) {
+    if (args != NULL && strcmp(args, "temp") == 0) {
+        printf("[Sensor] 目前車內溫度: 26.5 °C\n");
+    } else {
+        printf("[Error] read 指令參數錯誤。用法: read temp\n");
+    }
+}
 
 void CLI_Init(void) {
     cmd_index = 0;
     memset(cmd_buffer, 0, MAX_CMD_LEN);
 }
 
-/* 內部函式：負責執行已經拼接完成的一整句指令 */
+/* 核心解析器：查表法轉發 */
 static void CLI_ExecuteCommand(char *cmd_line) {
-    char *saveptr; // strtok_r 專用的狀態指標，確保多執行緒安全
+    char *saveptr;
     
-    // 1. 提取第一個單字作為主指令
     char *cmd = strtok_r(cmd_line, " ", &saveptr);
-    if (cmd == NULL) return; // 只是按了 Enter，空行不處理
+    if (cmd == NULL) return;
 
-    // 2. 指令辨識邏輯 (使用 strcmp)
-    if (strcmp(cmd, "help") == 0) {
-        printf("--- 系統指令選單 ---\n");
-        printf("  help      : 顯示此選單\n");
-        printf("  dump      : 印出 Flash 歷史日誌\n");
-        printf("  read temp : 讀取目前感測器溫度\n");
-        
-    } else if (strcmp(cmd, "dump") == 0) {
-        printf("[Storage] 正在從 W25Q64 讀取資料...\n");
-        
-    } else if (strcmp(cmd, "read") == 0) {
-        // 繼續提取下一個參數
-        char *arg = strtok_r(NULL, " ", &saveptr);
-        if (arg != NULL && strcmp(arg, "temp") == 0) {
-            printf("[Sensor] 目前溫度: 26.5 °C\n");
-        } else {
-            printf("[Error] read 指令參數錯誤。用法: read temp\n");
+    char *args = strtok_r(NULL, "", &saveptr);
+
+    for (int i = 0; i < NUM_CMDS; i++) {
+        if (strcmp(cmd, cli_cmd_table[i].cmd_name) == 0) {
+            cli_cmd_table[i].handler(args);
+            return;
         }
-        
-    } else {
-        printf("[Error] 未知指令: '%s'，請輸入 help 查看說明。\n", cmd);
     }
+    printf("[Error] 未知指令: '%s'，請輸入 help 查看說明。\n", cmd);
 }
 
-/* 主程式/Task 呼叫的更新函式 */
 void CLI_Update(RingBuffer_t *rx_buf) {
     rb_item_t c;
-    
-    // 不斷從 Buffer 拿出字元，直到 Buffer 空了為止
     while (RingBuffer_Pop(rx_buf, &c)) {
-        
-        // 遇到 Enter 鍵 (Carriage Return 或 Line Feed)
         if (c == '\r' || c == '\n') {
             if (cmd_index > 0) {
-                cmd_buffer[cmd_index] = '\0';  // 替字串補上結尾符號
-                CLI_ExecuteCommand(cmd_buffer); // 丟給解析器執行
-                cmd_index = 0;                 // 清零 index，準備迎接下一道指令
+                cmd_buffer[cmd_index] = '\0';
+                CLI_ExecuteCommand(cmd_buffer);
+                cmd_index = 0;
             }
         } else {
-            // 防護機制：避免超過 Buffer 上限 (保留 1 byte 給 '\0')
             if (cmd_index < MAX_CMD_LEN - 1) {
                 cmd_buffer[cmd_index++] = (char)c;
             }
