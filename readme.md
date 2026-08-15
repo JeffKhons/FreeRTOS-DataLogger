@@ -1,106 +1,88 @@
-# 專案開發藍圖：基於 FreeRTOS 的非同步感測資料擷取與日誌系統 (Data Logger)
+# 專案：基於 FreeRTOS 的車內高溫安全監控與日誌系統
 
 ## 📌 專案概述
-* **目標**：實作一個獨立運作的資料記錄器 (Data Logger)，模擬工業級嵌入式系統在無預警斷電或當機時的保存機制，可以透過 UART console 撈 log 追查。
+* **目標**：實作一個獨立運作的車內環境監控黑盒子。結合即時溫度警報、OLED 狀態顯示、無線遠端遙測，並具備無預警斷電時的日誌保存 (Last Gasp) 機制，可透過 CLI 撈取歷史紀錄。
 * **開發週期**：4 週 (3 週實作 + 1 週緩衝與優化)
-* **核心技術棧**：C 語言, STM32 Cortex-M4, FreeRTOS, I2C (Bit-banging), SPI, UART DMA
+* **核心技術棧**：C 語言, STM32 Cortex-M4, FreeRTOS (Queue, Mutex, Event Group, Software Timer), I2C, SPI, UART DMA
 * **硬體配置**：
   * **MCU**: STM32 Nucleo-F446RE (ARM Cortex-M4 帶 FPU)
   * **Sensor**: LM75 (I2C 數位溫度感測器)
   * **Storage**: W25Q64 (SPI Flash, 64Mbit)
+  * **Display**: 0.96" OLED (I2C 介面, SSD1306 驅動)
+  * **Wireless**: ESP8266 (Wi-Fi) 或 HC-05 (藍牙)
+  * **Alert**: 開發板內建 LED (PA5)
   * **Tool**: 24M 8CH 邏輯分析儀 (搭配 PulseView)
 
 ---
 
-## 🏗️ 系統規格設計
+## ⚙️ 系統規格設計
 
-1. **`背景巡視`
-   * 定期讀取 LM75 溫度，浮點數轉整數成本。
-2. **`異常警報`
-   * 溫度超過連續幾次的閥值會觸發警報 --> 連續是為了避免雜訊誤觸 
-3. **`時間來源`
-   * (A) 內部 RTC + VBAT 鈕扣電池，斷電持續計時
-   * (B) boot counter + 開機後 ticks
-4. **`紀錄格式`
-   * 搭配 Lock-free Ring Buffer 接收 CLI 輸入字元，保護系統效能。
-   * 固定 16 bytes，因為 W25Q64 page size = 256 bytes，page 不能跨頁。
-5. **`儲存方式`
-   * SPI 寫入 W25Q64 (8MB)，Flash ring buffer，寫滿抹除最舊 sector。
-6. **`斷電復原`
-7. **`CLI`
-   * UART 中斷接收，non-blocking 解析
+1. **背景巡視 (Polling)**：定期讀取 LM75 溫度，考量硬體 FPU 效能，評估浮點數轉整數的運算成本。
+2. **多重異常狀態機 (Complex Alert)**：警報不再僅限於單一溫度觸發，而是綜合「高溫危險」、「儲存體寫滿/失效」、「通訊異常」等多重事件進行狀態判定。
+3. **時間來源 (Timestamp)**：採用 Boot Counter + 開機後 Ticks 進行相對時間記錄（若後續擴充 RTC + VBAT 則切換為絕對時間）。
+4. **紀錄格式 (Data Payload)**：固定 16 Bytes 結構體。考量 W25Q64 Page Size = 256 Bytes，確保每 16 筆資料完美對齊不跨頁。
+5. **儲存方式 (Wear Leveling)**：SPI 寫入 W25Q64 (8MB)，實作 Flash Ring Buffer，寫滿時自動抹除最舊的 Sector。
+6. **斷電復原 (Recovery)**：開機時自動掃描 Flash，定位最後寫入位址以無縫銜接。
+7. **無鎖通訊 (CLI / Wireless)**：透過 UART 中斷與 SPSC Ring Buffer 接收指令，實作 Non-blocking 的指令解析器。
 
 ---
 
-## 🏗️ 系統架構設計
+## 🏗️ FreeRTOS 系統架構設計 (IPC 資源分配)
 
-系統劃分為 3 個核心 Task 與 1 個中斷 ISR，以達成非同步的高穩定運作：
+系統劃分為 4 個核心 Task、1 個事件守護者、1 個軟體定時器與 1 個中斷 ISR，徹底展現 RTOS 的多工排程與資源保護能力：
 
 1. **`Sensor_Task` (資料擷取任務 - 中優先級)**
-   * 使用 `vTaskDelayUntil` 確保絕對執行週期，避免 Drift。
-   * 定期讀取 LM75 溫度，打上 Timestamp (Tick Count)，將 `Data_Packet` 送入 Queue。
-2. **`Storage_Task` (持久化儲存任務 - 低優先級)**
-   * 阻塞等待 Queue 資料。
-   * 將接收到的資料透過 SPI 寫入 W25Q64 Flash，負責磨損平衡與位址管理。
-3. **`CLI_Task` (命令列互動任務 - 最低優先級)**
-   * 透過 UART 解析工程師指令 (如 `help`, `dump_log`, `clear_log`)。
-   * 使用純軟體 `strcmp` 實作指令辨識與選單。
-4. **`UART_DMA_ISR` (背景通訊中斷)**
-   * 搭配 Lock-free Ring Buffer 接收 CLI 輸入字元，保護系統效能。
+   * 使用 `vTaskDelayUntil` 確保絕對執行週期，避免計時飄移 (Drift)。
+   * 負責 I2C 讀取 LM75。若溫度連續超標，設置 **Event Group** 的 `TEMP_WARNING_BIT`。
+   * 將打包好的感測資料透過 **Queue** 送給 Storage_Task。
+2. **`Display_Task` (面板刷新任務 - 低優先級)**
+   * 負責更新 OLED 畫面 (溫度、系統狀態)。
+   * 與 Sensor_Task 共用 I2C 匯流排，需使用 **Mutex** 進行互斥保護，並展示優先權繼承 (Priority Inheritance) 機制防範優先權反轉。
+3. **`Storage_Task` (持久化儲存任務 - 低優先級)**
+   * 阻塞等待 Queue 內的感測資料，取得後透過 SPI 寫入 W25Q64。
+   * 若偵測到 Flash 容量已滿或 SPI 寫入失敗，設置 **Event Group** 的 `FLASH_ERROR_BIT`。
+4. **`Wireless_CLI_Task` (無線與命令列任務 - 低優先級)**
+   * 處理來自電腦或無線模組的指令字串。使用 `strcmp` 解析指令，執行查閱動作。
+   * 若發生 UART 斷線或緩衝區溢位，設置 **Event Group** 的 `UART_ERROR_BIT`。
+5. **`Alert_Manager_Task` (警報狀態機任務 - 最高優先級)**
+   * 平時使用 `xEventGroupWaitBits()` 處於 Blocked 狀態不佔 CPU。
+   * 綜合等待所有任務異常狀態 (支援 AND/OR 邏輯)。根據觸發的 Bit 組合，動態決定警報層級，並透過 FreeRTOS API 變更軟體定時器的週期。
+6. **`LED_Blink_Timer` (非阻塞硬體控制 - Software Timer)**
+   * 使用 FreeRTOS **Auto-reload Software Timer** 來實作 LED 閃爍。
+   * 根據警報層級由 `Alert_Manager_Task` 動態調整閃爍頻率（如：警告 1Hz，危險 5Hz），完全不使用 Task 內的迴圈 Delay，展現系統背景定時器的高階應用。
+7. **`UART_DMA_ISR` (背景通訊中斷)**
+   * 將收到的字元 Push 進入 Lock-free Ring Buffer，並利用 `portYIELD_FROM_ISR()` 喚醒 CLI_Task。
 
 ---
 
-## 📅 四週計畫
+## 📅 四週衝刺計畫
 
 ### Week 1：C 語言核心與純軟體通訊底層 (無硬體先行)
-* **指標與記憶體基底**：深度複習指標 (Pointer) 操作、記憶體對齊 (Memory Alignment) 觀念，並確立 `volatile` 的正確使用時機（防止編譯器將中斷會更改的變數優化掉）。
-* **Lock-free Ring Buffer 實作**：
-  * 實作單生產者單消費者 (SPSC) 模型。
-  * **嚴格無鎖條件成立**：明確規範 ISR 僅能修改 `head`，Task 僅能修改 `tail`。
-  * **效能與防護**：利用 N-1 滿水位機制與位元遮罩 (`& 0xFF`) 優化運算效能，並建立防護邏輯以杜絕 Buffer Overflow。
-* **純軟體 CLI 解析器 (PC 端模擬 UART)**：
-  * 實作字串接收與斷句邏輯。
-  * 運用 Thread-safe 的 `strtok_r` 與 `strcmp` 進行指令切割與辨識，建立具備擴充性的 `help` 選單架構。
-* **HAL Timebase 轉移 (RTOS)**：將 STM32 HAL 的系統時基從預設的 `SysTick` 移至硬體計時器 (如 TIM6)，保留 `SysTick` 給下一階段的 FreeRTOS Scheduler 專用。
+* **指標與記憶體基底**：複習指標操作、Memory Alignment，確保 `volatile` 正確防護 ISR 變數。
+* **Lock-free Ring Buffer**：實作 SPSC 模型，確立 ISR 寫 head、Task 寫 tail 的無鎖條件。利用 N-1 機制與位元遮罩 (`& 0xFF`) 達成防護與極致效能。
+* **純軟體 CLI 解析器**：運用 Thread-safe 的 `strtok_r` 與 `strcmp`，建立具備擴充性的 Non-blocking 系統選單。
+* **HAL Timebase 轉移**：將 STM32 HAL 時基從 `SysTick` 移至 TIM6，為 FreeRTOS Scheduler 鋪路。
 
 ### Week 2：通訊協議實作與硬體驅動 (Bare-metal)
-* **I2C Bit-banging (LM75 溫度感測器)**：
-  * 不依賴硬體 I2C，手刻 GPIO Open-drain + Pull-up 時序，以利 Debug 並加深對底層協議的理解。
-  * 實作 **9-Clock Bus Recovery** 機制，當系統重置導致 SDA 線被 Slave 咬死時，主動打 Clock 解鎖匯流排。
+* **I2C 匯流排通訊 (LM75 & OLED)**：
+  * 手刻 GPIO Open-drain + Pull-up 時序，實作 I2C 底層。
+  * 實作 **9-Clock Bus Recovery** 機制，解鎖被掛死的 SDA 線。
+  * 移植 SSD1306 OLED 顯示驅動。
 * **SPI Flash 暫存器級操作 (W25Q64)**：
-  * 學習 SPI 硬體狀態機。驗證 JEDEC ID (`0xEF 40 17`)。
-  * 實作 Write Enable (`0x06`)、Sector Erase (`0x20`) 與 Page Program (`0x02`)。
-  * 實作 Polling 狀態暫存器的 WIP (Write In Progress) bit，確保寫入完成。
-* **Flash 持久化位址管理**：實作輕量級 Flash Ring Buffer，系統開機時自動掃描尋找最後一次的寫入位址，確保新日誌能無縫銜接。
+  * 驗證 JEDEC ID，實作 Write Enable、Sector Erase、Page Program 與 Polling WIP bit 狀態機。
+  * 完成 Flash 啟動位址尋找與環形覆寫邏輯。
+* **UART 外部通訊**：打通與通訊模組的 AT Command / 資料收發底層。
 
-### Week 3：FreeRTOS 移植與任務多工架構
-* **任務解耦與建立**：導入 FreeRTOS，將系統拆分為獨立的 `Sensor_Task`、`Storage_Task` 與 `CLI_Task`。使用 `vTaskDelayUntil` 確保 Sensor 任務的絕對執行週期，避免 Drift。
-* **中斷與優先級陷阱迴避**：
-  * 設定 `NVIC_PRIORITYGROUP_4`。
-  * 釐清 Cortex-M (數字越小越優先) 與 FreeRTOS (數字越大越優先) 優先級邏輯相反的地雷。
-  * 確保 ISR 呼叫 FromISR API 時，其優先權限設定正確 (`configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY`)。
-* **任務通訊與上下文切換 (Context Switch)**：
-  * 運用 Queue 在任務間傳遞結構體 (`Data_Packet`)，並用 Mutex 保護 SPI Bus 避免資料交錯。
-  * 在 UART 接收 ISR 結尾實作 `portYIELD_FROM_ISR()`，強制 Context Switch 即時喚醒 CLI 任務。
+### Week 3：FreeRTOS 移植與任務 IPC 實戰
+* **任務解耦與建立**：掛載 FreeRTOS，拆分 Sensor, Storage, CLI, Display, Alert_Manager 等任務。
+* **中斷優先級陷阱迴避**：設定 `NVIC_PRIORITYGROUP_4`，釐清 Cortex-M 與 RTOS 優先級數字邏輯。
+* **任務間通訊 (IPC) 深度整合**：
+  * 實作 **Queue** 傳遞感測資料。
+  * 實作 **Mutex** 保護 I2C 避免 OLED 與 LM75 封包交錯。
+  * 實作 **Event Group** 處理多重任務的異常通報，取代單一的 Task Notification。
+  * 啟動 **Software Timer Daemon**，完成非阻塞式的 LED 頻率控制。
 
-### Week 4：系統整合、防呆與壓力測試
-* **硬體 UART DMA 整合**：將 Week 1 純軟體開發的 CLI 引擎正式掛載至 STM32 的 UART DMA 背景接收與發送。
-* **高可靠度機制 (Watchdog)**：實作獨立看門狗 (IWDG)，在最低優先級 Task 定期餵狗。設計故意觸發的死迴圈 Bug，驗證系統能否自動重啟並保留當機前的日誌。
-* **面試技術盤點**：使用 PulseView 邏輯分析儀截圖 SPI/I2C 實際時序。整理 Priority Inversion (優先權反轉)、無鎖條件等韌體面試必考精華。
-
-### 專案資料夾
-  📂 你的專案根目錄 (My_DataLogger)
- ┣ 📂 Core            <-- (底層配置：如果是用工具生成的代碼都放這)
- ┃  ┣ 📂 Inc        (例如 main.h, stm32f4xx_it.h)
- ┃  ┗ 📂 Src        (例如 main.c, stm32f4xx_it.c)
- ┃
- ┣ 📂 App             <-- (你的應用邏輯：面試最核心的價值放這)
- ┃  ┣ 📂 Inc        (ring_buffer.h, cli_task.h, data_logger.h)
- ┃  ┗ 📂 Src        (ring_buffer.c, cli_task.c, data_logger.c)
- ┃
- ┣ 📂 Drivers         <-- (硬體驅動層：你自己寫的外部 IC 驅動)
- ┃  ┣ 📂 Inc        (lm75.h, w25q64.h, bme280_if.h)
- ┃  ┗ 📂 Src        (lm75.c, w25q64.c, bme280_if.c)
- ┃
- ┗ 📂 Middlewares     <-- (第三方函式庫：別人的 Code)
-    ┗ 📂 FreeRTOS   (FreeRTOS 的原始碼)
+### Week 4：系統整合、防呆與進階電源管理
+* **進階電源管理 (Tickless Idle)**：實作熄火省電模式，啟動 FreeRTOS 深度睡眠機制，降低閒置功耗。
+* **高可靠度機制 (Watchdog)**：實作獨立看門狗 (IWDG)，驗證死迴圈狀態下系統的自動重啟與日誌銜接。
+* **面試技術盤點**：擷取 PulseView SPI/I2C 波形。統整 Mutex 優先權繼承、無鎖 Buffer 設計、Context Switch 流程等關鍵問答。
