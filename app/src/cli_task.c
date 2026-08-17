@@ -1,90 +1,144 @@
 #include <stdio.h>
 #include <string.h>
+#include <stdarg.h>
 #include "cli_task.h"
 
-#define MAX_CMD_LEN 64
+#define MAX_LINE_LEN 63
+#define MAX_ARGS 5
 
-static char cmd_buffer[MAX_CMD_LEN];
-static uint8_t cmd_index = 0;
+static char line_buf[MAX_LINE_LEN + 1];
+static uint32_t line_len = 0;
+static bool line_overflow = false;
 
-/* 1. 先宣告函式指標型態與具體 Handler 函式 (前置宣告) */
-typedef void (*CLI_CmdHandler_t)(char *args);
+uint32_t cli_overflow_count = 0;
 
-static void Cmd_Help(char *args);
-static void Cmd_Dump(char *args);
-static void Cmd_Read(char *args);
-
-/* 2. 建立指令轉發查表 (Command Routing Table) */
-typedef struct {
-    const char *cmd_name;
-    CLI_CmdHandler_t handler;
-    const char *help_text;
-} CLI_Command_t;
-
-static const CLI_Command_t cli_cmd_table[] = {
-    {"help", Cmd_Help, "顯示此系統指令選單"},
-    {"dump", Cmd_Dump, "印出 Flash 歷史日誌"},
-    {"read", Cmd_Read, "讀取系統狀態 (支援參數: temp)"},
-};
-
-static const int NUM_CMDS = sizeof(cli_cmd_table) / sizeof(cli_cmd_table[0]);
-
-/* 3. 真正實作各個 Handler 函式 */
-static void Cmd_Help(char *args) {
-    printf("\n--- 車內監控系統指令選單 ---\n");
-    for (int i = 0; i < NUM_CMDS; i++) {
-        printf("  %-10s : %s\n", cli_cmd_table[i].cmd_name, cli_cmd_table[i].help_text);
-    }
-    printf("----------------------------\n");
+/* 封裝 vsnprintf 搭配 static buffer，將格式化字串透過硬體層 (Port) 輸出 */
+void CLI_Printf(const char *format, ...) {
+    static char print_buf[128];
+    va_list args;
+    va_start(args, format);
+    vsnprintf(print_buf, sizeof(print_buf), format, args);
+    va_end(args);
+    CLI_Write(print_buf);
 }
 
-static void Cmd_Dump(char *args) {
-    printf("[Storage] 正在從 SPI Flash (W25Q64) 撈取歷史日誌...\n");
-}
-
-static void Cmd_Read(char *args) {
-    if (args != NULL && strcmp(args, "temp") == 0) {
-        printf("[Sensor] 目前車內溫度: 26.5 °C\n");
-    } else {
-        printf("[Error] read 指令參數錯誤。用法: read temp\n");
-    }
-}
-
-void CLI_Init(void) {
-    cmd_index = 0;
-    memset(cmd_buffer, 0, MAX_CMD_LEN);
-}
-
-/* 核心解析器：查表法轉發 */
-static void CLI_ExecuteCommand(char *cmd_line) {
-    char *saveptr;
+/* 將字串安全轉換為無號 32 位元整數，並嚴格攔截非法字元與乘法溢位 */
+static bool ParseU32(const char *str, uint32_t *out_val) {
+    if (!str || *str == '\0') return false;
     
-    char *cmd = strtok_r(cmd_line, " ", &saveptr);
-    if (cmd == NULL) return;
+    uint32_t val = 0;
+    while (*str) {
+        if (*str < '0' || *str > '9') return false;
+        uint32_t digit = (uint32_t)(*str - '0');
+        
+        /* 偵測 4294967296 溢位: val * 10 + digit > UINT32_MAX */
+        if (val > (4294967295U - digit) / 10) return false;
+        
+        val = val * 10 + digit;
+        str++;
+    }
+    *out_val = val;
+    return true;
+}
 
-    char *args = strtok_r(NULL, "", &saveptr);
+/* 根據解析完畢的 argc 與 argv，比對並執行對應的系統指令邏輯 */
+static void CLI_Execute(int argc, char *argv[]) {
+    if (argc == 0) return;
 
-    for (int i = 0; i < NUM_CMDS; i++) {
-        if (strcmp(cmd, cli_cmd_table[i].cmd_name) == 0) {
-            cli_cmd_table[i].handler(args);
-            return;
+    if (strcmp(argv[0], "help") == 0) {
+        CLI_Printf("Commands: help, read temp, dump [n], stat\r\n");
+    } 
+    else if (strcmp(argv[0], "read") == 0 && argc >= 2 && strcmp(argv[1], "temp") == 0) {
+        int32_t temp = CLI_PortReadTempX100();
+        uint32_t abs_temp;
+        
+        /* 處理負數溫度：避開 INT32_MIN 溢位 UB，先轉 unsigned 再取補數 */
+        if (temp < 0) {
+            abs_temp = (uint32_t)(~temp + 1);
+        } else {
+            abs_temp = (uint32_t)temp;
+        }
+        
+        CLI_Printf("Temp: %s%u.%02u\r\n", (temp < 0) ? "-" : "", abs_temp / 100, abs_temp % 100);
+    } 
+    else if (strcmp(argv[0], "dump") == 0) {
+        uint32_t n = 20; // 預設 20 筆
+        if (argc >= 2) {
+            if (!ParseU32(argv[1], &n)) {
+                CLI_Printf("Invalid number\r\n");
+                return;
+            }
+        }
+        uint32_t total = CLI_PortLogCount();
+        if (n > total) n = total;
+        
+        uint32_t first = total - n;
+        CLI_Printf("Dumping logs %u to %u...\r\n", first, total - 1);
+        
+        // 實際呼叫 CLI_PortLogRead 撈取...
+    } 
+    else if (strcmp(argv[0], "stat") == 0) {
+        CLI_Printf("cli.overflow: %u\r\n", cli_overflow_count);
+        // 此處可擴充 rx.count 與 rx.dropped，需透過 getter 從 ring_buffer 取得
+    } 
+    else {
+        CLI_Printf("Unknown command\r\n");
+    }
+}
+
+/* 自定義 Tokenizer：以空白與 Tab 為分隔符切分指令行，並轉交給執行器 */
+static void CLI_ParseAndExecute(char *line) {
+    char *argv[MAX_ARGS];
+    int argc = 0;
+    char *p = line;
+
+    while (*p) {
+        while (*p == ' ' || *p == '\t') p++;
+        if (*p == '\0') break;
+        
+        if (argc < MAX_ARGS) argv[argc++] = p;
+        
+        while (*p && *p != ' ' && *p != '\t') p++;
+        if (*p) {
+            *p = '\0';
+            p++;
         }
     }
-    printf("[Error] 未知指令: '%s'，請輸入 help 查看說明。\n", cmd);
+    CLI_Execute(argc, argv);
 }
 
+/* 初始化 CLI 接收狀態機，清空字串緩衝區與溢位計數 */
+void CLI_Init(void) {
+    line_len = 0;
+    line_overflow = false;
+    cli_overflow_count = 0;
+}
+
+/* 週期性從 Ring Buffer 提取字元以組合完整指令，並負責攔截單行字元數溢位 */
 void CLI_Update(RingBuffer_t *rx_buf) {
     rb_item_t c;
-    while (RingBuffer_Pop(rx_buf, &c)) {
+    while (RingBuffer_Get(rx_buf, &c)) {
+        /* 遇到 \r 或 \n 視為行尾，且只執行一次（過濾連續 \r\n\r\n） */
         if (c == '\r' || c == '\n') {
-            if (cmd_index > 0) {
-                cmd_buffer[cmd_index] = '\0';
-                CLI_ExecuteCommand(cmd_buffer);
-                cmd_index = 0;
+            if (line_overflow) {
+                line_overflow = false; // 拋棄完畢，重置狀態
+                line_len = 0;
+            } else if (line_len > 0) {
+                line_buf[line_len] = '\0';
+                CLI_ParseAndExecute(line_buf);
+                line_len = 0;
             }
         } else {
-            if (cmd_index < MAX_CMD_LEN - 1) {
-                cmd_buffer[cmd_index++] = (char)c;
+            /* 處理正常字元 */
+            if (!line_overflow) {
+                if (line_len < MAX_LINE_LEN) {
+                    line_buf[line_len++] = (char)c;
+                } else {
+                    /* 一行超過 63 字元: 整行丟棄並計數 */
+                    line_overflow = true;
+                    cli_overflow_count++;
+                    line_len = 0;
+                }
             }
         }
     }
