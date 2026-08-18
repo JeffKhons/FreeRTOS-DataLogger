@@ -15,6 +15,10 @@ uint32_t RingBuffer_Count(RingBuffer_t *rb) {
     return (rb->head - rb->tail) & RING_BUFFER_MASK;
 }
 
+uint32_t RingBuffer_Dropped(RingBuffer_t *rb) {
+    return rb->dropped;
+}
+
 /* 將單一字元寫入 Buffer，若空間已滿則增加丟棄計數並回傳失敗 */
 bool RingBuffer_Put(RingBuffer_t *rb, rb_item_t data) {
     if (RingBuffer_Count(rb) == RING_BUFFER_MASK) {

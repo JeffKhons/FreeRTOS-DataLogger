@@ -30,5 +30,6 @@ void RingBuffer_Init(RingBuffer_t *rb);
 bool RingBuffer_Put(RingBuffer_t *rb, rb_item_t data);
 bool RingBuffer_Get(RingBuffer_t *rb, rb_item_t *data);
 uint32_t RingBuffer_Count(RingBuffer_t *rb);
+uint32_t RingBuffer_Dropped(RingBuffer_t *rb); /* 取得丟棄計數 */
 
 #endif /* RING_BUFFER_H */

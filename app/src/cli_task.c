@@ -42,44 +42,73 @@ static bool ParseU32(const char *str, uint32_t *out_val) {
 }
 
 /* 根據解析完畢的 argc 與 argv，比對並執行對應的系統指令邏輯 */
-static void CLI_Execute(int argc, char *argv[]) {
+/* 新增 rx_buf 參數，讓 stat 指令可以取得環形緩衝區的狀態 */
+static void CLI_Execute(int argc, char *argv[], RingBuffer_t *rx_buf) {
     if (argc == 0) return;
 
     if (strcmp(argv[0], "help") == 0) {
         CLI_Printf("Commands: help, read temp, dump [n], stat\r\n");
     } 
     else if (strcmp(argv[0], "read") == 0 && argc >= 2 && strcmp(argv[1], "temp") == 0) {
-        int32_t temp = CLI_PortReadTempX100();
-        uint32_t abs_temp;
+        int32_t temp;
         
-        /* 處理負數溫度：避開 INT32_MIN 溢位 UB，先轉 unsigned 再取補數 */
-        if (temp < 0) {
-            abs_temp = (uint32_t)(~temp + 1);
+        /* CLI_PortReadTempX100 改成 bool 回傳加出參數，以防 I2C 讀取失敗 */
+        if (CLI_PortReadTempX100(&temp)) {
+            uint32_t abs_temp;
+            
+            /* 處理負數溫度：避開 INT32_MIN 溢位 UB，先轉 unsigned 再取補數 */
+            if (temp < 0) {
+                abs_temp = 0u - (uint32_t)temp;
+            } else {
+                abs_temp = (uint32_t)temp;
+            }
+            
+            CLI_Printf("Temp: %s%u.%02u\r\n", (temp < 0) ? "-" : "", abs_temp / 100, abs_temp % 100);
         } else {
-            abs_temp = (uint32_t)temp;
+            CLI_Printf("Error: I2C Sensor read failed\r\n");
         }
-        
-        CLI_Printf("Temp: %s%u.%02u\r\n", (temp < 0) ? "-" : "", abs_temp / 100, abs_temp % 100);
     } 
     else if (strcmp(argv[0], "dump") == 0) {
+        uint32_t total = CLI_PortLogCount();
+        
+        /* dump : total == 0 要先印 "no record" 就 return，避免無號數環繞 */
+        if (total == 0) {
+            CLI_Printf("no record\r\n");
+            return;
+        }
+
         uint32_t n = 20; // 預設 20 筆
         if (argc >= 2) {
-            if (!ParseU32(argv[1], &n)) {
+            /* dump 0 要拒絕: ParseU32 失敗或 n==0 都報錯 */
+            if (!ParseU32(argv[1], &n) || n == 0) {
                 CLI_Printf("Invalid number\r\n");
                 return;
             }
         }
-        uint32_t total = CLI_PortLogCount();
         if (n > total) n = total;
         
         uint32_t first = total - n;
         CLI_Printf("Dumping logs %u to %u...\r\n", first, total - 1);
         
-        // 實際呼叫 CLI_PortLogRead 撈取...
+        /* 實際呼叫 CLI_PortLogRead 逐筆撈取 */
+        for (uint32_t i = first; i < total; i++) {
+            CLI_LogRecord_t rec;
+            if (CLI_PortLogRead(i, &rec)) {
+                uint32_t abs_temp = (rec.temp_x100 < 0) ? (0u - (uint32_t)rec.temp_x100) : (uint32_t)rec.temp_x100;
+                CLI_Printf("[%u] Seq:%u TS:%u Temp:%s%u.%02u Flags:0x%02X\r\n",
+                           i, rec.seq, rec.timestamp,
+                           (rec.temp_x100 < 0) ? "-" : "", abs_temp / 100, abs_temp % 100, rec.flags);
+            } else {
+                CLI_Printf("[%u] Read error\r\n", i);
+            }
+        }
     } 
     else if (strcmp(argv[0], "stat") == 0) {
+        /* stat 印 rx.count / rx.dropped / cli.overflow / log.records */
+        CLI_Printf("rx.count: %u\r\n", RingBuffer_Count(rx_buf));
+        CLI_Printf("rx.dropped: %u\r\n", RingBuffer_Dropped(rx_buf));
         CLI_Printf("cli.overflow: %u\r\n", cli_overflow_count);
-        // 此處可擴充 rx.count 與 rx.dropped，需透過 getter 從 ring_buffer 取得
+        CLI_Printf("log.records: %u\r\n", CLI_PortLogCount());
     } 
     else {
         CLI_Printf("Unknown command\r\n");
@@ -87,7 +116,7 @@ static void CLI_Execute(int argc, char *argv[]) {
 }
 
 /* 自定義 Tokenizer：以空白與 Tab 為分隔符切分指令行，並轉交給執行器 */
-static void CLI_ParseAndExecute(char *line) {
+static void CLI_ParseAndExecute(char *line, RingBuffer_t *rx_buf) {
     char *argv[MAX_ARGS];
     int argc = 0;
     char *p = line;
@@ -104,7 +133,7 @@ static void CLI_ParseAndExecute(char *line) {
             p++;
         }
     }
-    CLI_Execute(argc, argv);
+    CLI_Execute(argc, argv, rx_buf);
 }
 
 /* 初始化 CLI 接收狀態機，清空字串緩衝區與溢位計數 */
@@ -125,7 +154,7 @@ void CLI_Update(RingBuffer_t *rx_buf) {
                 line_len = 0;
             } else if (line_len > 0) {
                 line_buf[line_len] = '\0';
-                CLI_ParseAndExecute(line_buf);
+                CLI_ParseAndExecute(line_buf, rx_buf);
                 line_len = 0;
             }
         } else {
