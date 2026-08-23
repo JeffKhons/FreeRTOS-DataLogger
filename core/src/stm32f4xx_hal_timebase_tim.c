@@ -1,61 +1,138 @@
+/* USER CODE BEGIN Header */
+/**
+  ******************************************************************************
+  * @file    stm32f4xx_hal_timebase_tim.c
+  * @brief   HAL time base based on the hardware TIM.
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2026 STMicroelectronics.
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+/* USER CODE END Header */
+
+/* Includes ------------------------------------------------------------------*/
 #include "stm32f4xx_hal.h"
+#include "stm32f4xx_hal_tim.h"
 
-/* 宣告 TIM6 的 Handle */
-TIM_HandleTypeDef htim6;
+/* Private typedef -----------------------------------------------------------*/
+/* Private define ------------------------------------------------------------*/
+/* Private macro -------------------------------------------------------------*/
+/* Private variables ---------------------------------------------------------*/
+TIM_HandleTypeDef        htim6;
+/* Private function prototypes -----------------------------------------------*/
+/* Private functions ---------------------------------------------------------*/
 
-/* 覆寫弱函式：將 HAL 的 1ms Tick 來源改為 TIM6 */
+/**
+  * @brief  This function configures the TIM6 as a time base source.
+  *         The time source is configured  to have 1ms time base with a dedicated
+  *         Tick interrupt priority.
+  * @note   This function is called  automatically at the beginning of program after
+  *         reset by HAL_Init() or at any time when clock is configured, by HAL_RCC_ClockConfig().
+  * @param  TickPriority: Tick interrupt priority.
+  * @retval HAL status
+  */
 HAL_StatusTypeDef HAL_InitTick(uint32_t TickPriority)
 {
-    RCC_ClkInitTypeDef    clkconfig;
-    uint32_t              uwTimclock = 0;
-    uint32_t              uwPrescalerValue = 0;
-    uint32_t              pFLatency;
+  RCC_ClkInitTypeDef    clkconfig;
+  uint32_t              uwTimclock, uwAPB1Prescaler = 0U;
 
-    /* 啟用 TIM6 時脈 */
-    __HAL_RCC_TIM6_CLK_ENABLE();
+  uint32_t              uwPrescalerValue = 0U;
+  uint32_t              pFLatency;
 
-    /* 取得系統時鐘配置，以計算 APB1 的時脈頻率 */
-    HAL_RCC_GetClockConfig(&clkconfig, &pFLatency);
+  HAL_StatusTypeDef     status;
 
-    /* 計算 TIM6 時脈 (TIM6 掛載於 APB1) */
+  /* Enable TIM6 clock */
+  __HAL_RCC_TIM6_CLK_ENABLE();
+
+  /* Get clock configuration */
+  HAL_RCC_GetClockConfig(&clkconfig, &pFLatency);
+
+  /* Get APB1 prescaler */
+  uwAPB1Prescaler = clkconfig.APB1CLKDivider;
+  /* Compute TIM6 clock */
+  if (uwAPB1Prescaler == RCC_HCLK_DIV1)
+  {
     uwTimclock = HAL_RCC_GetPCLK1Freq();
-    
-    /* 根據 STM32 的硬體設計，若 APB1 除頻不為 1，Timer 時脈會自動乘 2 */
-    if (clkconfig.APB1CLKDivider != RCC_HCLK_DIV1) {
-        uwTimclock *= 2; 
-    }
+  }
+  else
+  {
+    uwTimclock = 2UL * HAL_RCC_GetPCLK1Freq();
+  }
 
-    /* 計算 Prescaler，將計數器頻率降為 1MHz (即 1 微秒計數一次) */
-    uwPrescalerValue = (uint32_t) ((uwTimclock / 1000000U) - 1U);
+  /* Compute the prescaler value to have TIM6 counter clock equal to 1MHz */
+  uwPrescalerValue = (uint32_t) ((uwTimclock / 1000000U) - 1U);
 
-    /* 初始化 TIM6 */
-    htim6.Instance = TIM6;
-    /* 1ms 週期 = 1000 * 1 微秒 */
-    htim6.Init.Period = (1000000U / 1000U) - 1U; 
-    htim6.Init.Prescaler = uwPrescalerValue;
-    htim6.Init.ClockDivision = 0;
-    htim6.Init.CounterMode = TIM_COUNTERMODE_UP;
+  /* Initialize TIM6 */
+  htim6.Instance = TIM6;
 
-    if (HAL_TIM_Base_Init(&htim6) == HAL_OK) {
-        /* 設定 TIM6 的 NVIC 優先權並啟用中斷 (使用傳入的 TickPriority) */
-        HAL_NVIC_SetPriority(TIM6_DAC_IRQn, TickPriority, 0);
+  /* Initialize TIMx peripheral as follow:
+   * Period = [(TIM6CLK/1000) - 1]. to have a (1/1000) s time base.
+   * Prescaler = (uwTimclock/1000000 - 1) to have a 1MHz counter clock.
+   * ClockDivision = 0
+   * Counter direction = Up
+   */
+  htim6.Init.Period = (1000000U / 1000U) - 1U;
+  htim6.Init.Prescaler = uwPrescalerValue;
+  htim6.Init.ClockDivision = 0;
+  htim6.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim6.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+
+  status = HAL_TIM_Base_Init(&htim6);
+  if (status == HAL_OK)
+  {
+
+    /* Start the TIM time Base generation in interrupt mode */
+    status = HAL_TIM_Base_Start_IT(&htim6);
+    if (status == HAL_OK)
+    {
+    /* Enable the TIM6 global Interrupt */
         HAL_NVIC_EnableIRQ(TIM6_DAC_IRQn);
-        
-        /* 啟動 TIM6 與其更新中斷 */
-        return HAL_TIM_Base_Start_IT(&htim6);
+      /* Configure the SysTick IRQ priority */
+      if (TickPriority < (1UL << __NVIC_PRIO_BITS))
+      {
+        /* Configure the TIM IRQ priority */
+        HAL_NVIC_SetPriority(TIM6_DAC_IRQn, TickPriority, 0U);
+        uwTickPrio = TickPriority;
+      }
+      else
+      {
+        status = HAL_ERROR;
+      }
     }
-    
-    return HAL_ERROR;
+  }
+
+ /* Return function status */
+  return status;
 }
 
-/* 暫停 HAL Tick 中斷 (進入深度睡眠前呼叫) */
+/**
+  * @brief  Suspend Tick increment.
+  * @note   Disable the tick increment by disabling TIM6 update interrupt.
+  * @param  None
+  * @retval None
+  */
 void HAL_SuspendTick(void)
 {
-    __HAL_TIM_DISABLE_IT(&htim6, TIM_IT_UPDATE);
+  /* Disable TIM6 update Interrupt */
+  __HAL_TIM_DISABLE_IT(&htim6, TIM_IT_UPDATE);
 }
 
-/* 恢復 HAL Tick 中斷 (喚醒後呼叫) */
+/**
+  * @brief  Resume Tick increment.
+  * @note   Enable the tick increment by Enabling TIM6 update interrupt.
+  * @param  None
+  * @retval None
+  */
 void HAL_ResumeTick(void)
 {
-    __HAL_TIM_ENABLE_IT(&htim6, TIM_IT_UPDATE);
+  /* Enable TIM6 Update interrupt */
+  __HAL_TIM_ENABLE_IT(&htim6, TIM_IT_UPDATE);
 }
+

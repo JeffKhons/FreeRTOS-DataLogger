@@ -1,0 +1,1459 @@
+ARM GAS  C:\Users\user\AppData\Local\Temp\ccdVR0NF.s 			page 1
+
+
+   1              		.cpu cortex-m4
+   2              		.arch armv7e-m
+   3              		.fpu fpv4-sp-d16
+   4              		.eabi_attribute 27, 1
+   5              		.eabi_attribute 28, 1
+   6              		.eabi_attribute 20, 1
+   7              		.eabi_attribute 21, 1
+   8              		.eabi_attribute 23, 3
+   9              		.eabi_attribute 24, 1
+  10              		.eabi_attribute 25, 1
+  11              		.eabi_attribute 26, 1
+  12              		.eabi_attribute 30, 1
+  13              		.eabi_attribute 34, 1
+  14              		.eabi_attribute 18, 4
+  15              		.file	"cli_task.c"
+  16              		.text
+  17              	.Ltext0:
+  18              		.cfi_sections	.debug_frame
+  19              		.file 1 "app/src/cli_task.c"
+  20              		.section	.text.ParseU32,"ax",%progbits
+  21              		.align	1
+  22              		.syntax unified
+  23              		.thumb
+  24              		.thumb_func
+  26              	ParseU32:
+  27              	.LVL0:
+  28              	.LFB4:
+   1:app/src/cli_task.c **** #include <stdio.h>
+   2:app/src/cli_task.c **** #include <string.h>
+   3:app/src/cli_task.c **** #include <stdarg.h>
+   4:app/src/cli_task.c **** #include "cli_task.h"
+   5:app/src/cli_task.c **** 
+   6:app/src/cli_task.c **** #define MAX_LINE_LEN 63
+   7:app/src/cli_task.c **** #define MAX_ARGS 5
+   8:app/src/cli_task.c **** 
+   9:app/src/cli_task.c **** static char line_buf[MAX_LINE_LEN + 1];
+  10:app/src/cli_task.c **** static uint32_t line_len = 0;
+  11:app/src/cli_task.c **** static bool line_overflow = false;
+  12:app/src/cli_task.c **** 
+  13:app/src/cli_task.c **** uint32_t cli_overflow_count = 0;
+  14:app/src/cli_task.c **** 
+  15:app/src/cli_task.c **** /* 封裝 vsnprintf 搭配 static buffer，將格式化字串透過硬體層 (Port) 輸出 */
+  16:app/src/cli_task.c **** void CLI_Printf(const char *format, ...) {
+  17:app/src/cli_task.c ****     static char print_buf[128];
+  18:app/src/cli_task.c ****     va_list args;
+  19:app/src/cli_task.c ****     va_start(args, format);
+  20:app/src/cli_task.c ****     vsnprintf(print_buf, sizeof(print_buf), format, args);
+  21:app/src/cli_task.c ****     va_end(args);
+  22:app/src/cli_task.c ****     CLI_Write(print_buf);
+  23:app/src/cli_task.c **** }
+  24:app/src/cli_task.c **** 
+  25:app/src/cli_task.c **** /* 將字串安全轉換為無號 32 位元整數，並嚴格攔截非法字元與乘法溢位 */
+  26:app/src/cli_task.c **** static bool ParseU32(const char *str, uint32_t *out_val) {
+  29              		.loc 1 26 58 view -0
+  30              		.cfi_startproc
+  31              		@ args = 0, pretend = 0, frame = 0
+  32              		@ frame_needed = 0, uses_anonymous_args = 0
+ARM GAS  C:\Users\user\AppData\Local\Temp\ccdVR0NF.s 			page 2
+
+
+  27:app/src/cli_task.c ****     if (!str || *str == '\0') return false;
+  33              		.loc 1 27 5 view .LVU1
+  34              		.loc 1 27 8 is_stmt 0 view .LVU2
+  35 0000 30B3     		cbz	r0, .L10
+  26:app/src/cli_task.c ****     if (!str || *str == '\0') return false;
+  36              		.loc 1 26 58 view .LVU3
+  37 0002 00B5     		push	{lr}
+  38              	.LCFI0:
+  39              		.cfi_def_cfa_offset 4
+  40              		.cfi_offset 14, -4
+  41 0004 8E46     		mov	lr, r1
+  42 0006 8446     		mov	ip, r0
+  43              		.loc 1 27 17 discriminator 2 view .LVU4
+  44 0008 0378     		ldrb	r3, [r0]	@ zero_extendqisi2
+  45              		.loc 1 27 14 discriminator 2 view .LVU5
+  46 000a DBB1     		cbz	r3, .L6
+  28:app/src/cli_task.c ****     
+  29:app/src/cli_task.c ****     uint32_t val = 0;
+  47              		.loc 1 29 14 view .LVU6
+  48 000c 0022     		movs	r2, #0
+  49              	.LVL1:
+  50              	.L3:
+  30:app/src/cli_task.c ****     while (*str) {
+  51              		.loc 1 30 12 is_stmt 1 view .LVU7
+  52 000e 9CF80030 		ldrb	r3, [ip]	@ zero_extendqisi2
+  53 0012 9BB1     		cbz	r3, .L13
+  54              	.LBB2:
+  31:app/src/cli_task.c ****         if (*str < '0' || *str > '9') return false;
+  55              		.loc 1 31 9 view .LVU8
+  56              		.loc 1 31 24 is_stmt 0 view .LVU9
+  57 0014 A3F13000 		sub	r0, r3, #48
+  58 0018 C0B2     		uxtb	r0, r0
+  59              		.loc 1 31 12 view .LVU10
+  60 001a 0928     		cmp	r0, #9
+  61 001c 14D8     		bhi	.L7
+  32:app/src/cli_task.c ****         uint32_t digit = (uint32_t)(*str - '0');
+  62              		.loc 1 32 9 is_stmt 1 view .LVU11
+  63              		.loc 1 32 42 is_stmt 0 view .LVU12
+  64 001e 303B     		subs	r3, r3, #48
+  65              	.LVL2:
+  33:app/src/cli_task.c ****         
+  34:app/src/cli_task.c ****         /* 偵測 4294967296 溢位: val * 10 + digit > UINT32_MAX */
+  35:app/src/cli_task.c ****         if (val > (4294967295U - digit) / 10) return false;
+  66              		.loc 1 35 9 is_stmt 1 view .LVU13
+  67              		.loc 1 35 32 is_stmt 0 view .LVU14
+  68 0020 D843     		mvns	r0, r3
+  69              		.loc 1 35 41 view .LVU15
+  70 0022 0C49     		ldr	r1, .L14
+  71 0024 A1FB0010 		umull	r1, r0, r1, r0
+  72              		.loc 1 35 12 view .LVU16
+  73 0028 B2EBD00F 		cmp	r2, r0, lsr #3
+  74 002c 0ED8     		bhi	.L8
+  36:app/src/cli_task.c ****         
+  37:app/src/cli_task.c ****         val = val * 10 + digit;
+  75              		.loc 1 37 9 is_stmt 1 view .LVU17
+  76              		.loc 1 37 19 is_stmt 0 view .LVU18
+  77 002e 02EB8202 		add	r2, r2, r2, lsl #2
+ARM GAS  C:\Users\user\AppData\Local\Temp\ccdVR0NF.s 			page 3
+
+
+  78              	.LVL3:
+  79              		.loc 1 37 13 view .LVU19
+  80 0032 03EB4202 		add	r2, r3, r2, lsl #1
+  81              	.LVL4:
+  38:app/src/cli_task.c ****         str++;
+  82              		.loc 1 38 9 is_stmt 1 view .LVU20
+  83              		.loc 1 38 12 is_stmt 0 view .LVU21
+  84 0036 0CF1010C 		add	ip, ip, #1
+  85              	.LVL5:
+  86              		.loc 1 38 12 view .LVU22
+  87 003a E8E7     		b	.L3
+  88              	.LVL6:
+  89              	.L13:
+  90              		.loc 1 38 12 view .LVU23
+  91              	.LBE2:
+  39:app/src/cli_task.c ****     }
+  40:app/src/cli_task.c ****     *out_val = val;
+  92              		.loc 1 40 5 is_stmt 1 view .LVU24
+  93              		.loc 1 40 14 is_stmt 0 view .LVU25
+  94 003c CEF80020 		str	r2, [lr]
+  41:app/src/cli_task.c ****     return true;
+  95              		.loc 1 41 5 is_stmt 1 view .LVU26
+  96              		.loc 1 41 12 is_stmt 0 view .LVU27
+  97 0040 0120     		movs	r0, #1
+  98 0042 00E0     		b	.L2
+  99              	.LVL7:
+ 100              	.L6:
+  27:app/src/cli_task.c ****     
+ 101              		.loc 1 27 38 discriminator 3 view .LVU28
+ 102 0044 1846     		mov	r0, r3
+ 103              	.LVL8:
+ 104              	.L2:
+  42:app/src/cli_task.c **** }
+ 105              		.loc 1 42 1 view .LVU29
+ 106 0046 00BD     		pop	{pc}
+ 107              	.LVL9:
+ 108              	.L7:
+ 109              	.LBB3:
+  31:app/src/cli_task.c ****         uint32_t digit = (uint32_t)(*str - '0');
+ 110              		.loc 1 31 46 discriminator 1 view .LVU30
+ 111 0048 0020     		movs	r0, #0
+ 112 004a FCE7     		b	.L2
+ 113              	.LVL10:
+ 114              	.L8:
+  35:app/src/cli_task.c ****         
+ 115              		.loc 1 35 54 discriminator 1 view .LVU31
+ 116 004c 0020     		movs	r0, #0
+ 117 004e FAE7     		b	.L2
+ 118              	.LVL11:
+ 119              	.L10:
+ 120              	.LCFI1:
+ 121              		.cfi_def_cfa_offset 0
+ 122              		.cfi_restore 14
+  35:app/src/cli_task.c ****         
+ 123              		.loc 1 35 54 discriminator 1 view .LVU32
+ 124              	.LBE3:
+ 125              		.loc 1 42 1 view .LVU33
+ARM GAS  C:\Users\user\AppData\Local\Temp\ccdVR0NF.s 			page 4
+
+
+ 126 0050 7047     		bx	lr
+ 127              	.L15:
+ 128 0052 00BF     		.align	2
+ 129              	.L14:
+ 130 0054 CDCCCCCC 		.word	-858993459
+ 131              		.cfi_endproc
+ 132              	.LFE4:
+ 134              		.section	.text.CLI_Printf,"ax",%progbits
+ 135              		.align	1
+ 136              		.global	CLI_Printf
+ 137              		.syntax unified
+ 138              		.thumb
+ 139              		.thumb_func
+ 141              	CLI_Printf:
+ 142              	.LVL12:
+ 143              	.LFB3:
+  16:app/src/cli_task.c ****     static char print_buf[128];
+ 144              		.loc 1 16 42 is_stmt 1 view -0
+ 145              		.cfi_startproc
+ 146              		@ args = 4, pretend = 16, frame = 8
+ 147              		@ frame_needed = 0, uses_anonymous_args = 1
+  16:app/src/cli_task.c ****     static char print_buf[128];
+ 148              		.loc 1 16 42 is_stmt 0 view .LVU35
+ 149 0000 0FB4     		push	{r0, r1, r2, r3}
+ 150              	.LCFI2:
+ 151              		.cfi_def_cfa_offset 16
+ 152              		.cfi_offset 0, -16
+ 153              		.cfi_offset 1, -12
+ 154              		.cfi_offset 2, -8
+ 155              		.cfi_offset 3, -4
+ 156 0002 10B5     		push	{r4, lr}
+ 157              	.LCFI3:
+ 158              		.cfi_def_cfa_offset 24
+ 159              		.cfi_offset 4, -24
+ 160              		.cfi_offset 14, -20
+ 161 0004 82B0     		sub	sp, sp, #8
+ 162              	.LCFI4:
+ 163              		.cfi_def_cfa_offset 32
+ 164 0006 04AB     		add	r3, sp, #16
+ 165 0008 53F8042B 		ldr	r2, [r3], #4
+  17:app/src/cli_task.c ****     va_list args;
+ 166              		.loc 1 17 5 is_stmt 1 view .LVU36
+  18:app/src/cli_task.c ****     va_start(args, format);
+ 167              		.loc 1 18 5 view .LVU37
+  19:app/src/cli_task.c ****     vsnprintf(print_buf, sizeof(print_buf), format, args);
+ 168              		.loc 1 19 5 view .LVU38
+ 169 000c 0193     		str	r3, [sp, #4]
+  20:app/src/cli_task.c ****     va_end(args);
+ 170              		.loc 1 20 5 view .LVU39
+ 171 000e 064C     		ldr	r4, .L18
+ 172 0010 8021     		movs	r1, #128
+ 173 0012 2046     		mov	r0, r4
+ 174 0014 FFF7FEFF 		bl	vsnprintf
+ 175              	.LVL13:
+  21:app/src/cli_task.c ****     CLI_Write(print_buf);
+ 176              		.loc 1 21 5 view .LVU40
+  22:app/src/cli_task.c **** }
+ARM GAS  C:\Users\user\AppData\Local\Temp\ccdVR0NF.s 			page 5
+
+
+ 177              		.loc 1 22 5 view .LVU41
+ 178 0018 2046     		mov	r0, r4
+ 179 001a FFF7FEFF 		bl	CLI_Write
+ 180              	.LVL14:
+  23:app/src/cli_task.c **** 
+ 181              		.loc 1 23 1 is_stmt 0 view .LVU42
+ 182 001e 02B0     		add	sp, sp, #8
+ 183              	.LCFI5:
+ 184              		.cfi_def_cfa_offset 24
+ 185              		@ sp needed
+ 186 0020 BDE81040 		pop	{r4, lr}
+ 187              	.LCFI6:
+ 188              		.cfi_restore 14
+ 189              		.cfi_restore 4
+ 190              		.cfi_def_cfa_offset 16
+ 191 0024 04B0     		add	sp, sp, #16
+ 192              	.LCFI7:
+ 193              		.cfi_restore 3
+ 194              		.cfi_restore 2
+ 195              		.cfi_restore 1
+ 196              		.cfi_restore 0
+ 197              		.cfi_def_cfa_offset 0
+ 198 0026 7047     		bx	lr
+ 199              	.L19:
+ 200              		.align	2
+ 201              	.L18:
+ 202 0028 00000000 		.word	print_buf.0
+ 203              		.cfi_endproc
+ 204              	.LFE3:
+ 206              		.section	.rodata.CLI_Execute.str1.4,"aMS",%progbits,1
+ 207              		.align	2
+ 208              	.LC0:
+ 209 0000 2D00     		.ascii	"-\000"
+ 210 0002 0000     		.align	2
+ 211              	.LC1:
+ 212 0004 00       		.ascii	"\000"
+ 213 0005 000000   		.align	2
+ 214              	.LC2:
+ 215 0008 68656C70 		.ascii	"help\000"
+ 215      00
+ 216 000d 000000   		.align	2
+ 217              	.LC3:
+ 218 0010 436F6D6D 		.ascii	"Commands: help, read temp, dump [n], stat\015\012\000"
+ 218      616E6473 
+ 218      3A206865 
+ 218      6C702C20 
+ 218      72656164 
+ 219              		.align	2
+ 220              	.LC4:
+ 221 003c 72656164 		.ascii	"read\000"
+ 221      00
+ 222 0041 000000   		.align	2
+ 223              	.LC5:
+ 224 0044 74656D70 		.ascii	"temp\000"
+ 224      00
+ 225 0049 000000   		.align	2
+ 226              	.LC6:
+ARM GAS  C:\Users\user\AppData\Local\Temp\ccdVR0NF.s 			page 6
+
+
+ 227 004c 54656D70 		.ascii	"Temp: %s%u.%02u\015\012\000"
+ 227      3A202573 
+ 227      25752E25 
+ 227      3032750D 
+ 227      0A00
+ 228 005e 0000     		.align	2
+ 229              	.LC7:
+ 230 0060 4572726F 		.ascii	"Error: I2C Sensor read failed\015\012\000"
+ 230      723A2049 
+ 230      32432053 
+ 230      656E736F 
+ 230      72207265 
+ 231              		.align	2
+ 232              	.LC8:
+ 233 0080 64756D70 		.ascii	"dump\000"
+ 233      00
+ 234 0085 000000   		.align	2
+ 235              	.LC9:
+ 236 0088 6E6F2072 		.ascii	"no record\015\012\000"
+ 236      65636F72 
+ 236      640D0A00 
+ 237              		.align	2
+ 238              	.LC10:
+ 239 0094 496E7661 		.ascii	"Invalid number\015\012\000"
+ 239      6C696420 
+ 239      6E756D62 
+ 239      65720D0A 
+ 239      00
+ 240 00a5 000000   		.align	2
+ 241              	.LC11:
+ 242 00a8 44756D70 		.ascii	"Dumping logs %u to %u...\015\012\000"
+ 242      696E6720 
+ 242      6C6F6773 
+ 242      20257520 
+ 242      746F2025 
+ 243 00c3 00       		.align	2
+ 244              	.LC12:
+ 245 00c4 5B25755D 		.ascii	"[%u] Seq:%u TS:%u Temp:%s%u.%02u Flags:0x%02X\015\012"
+ 245      20536571 
+ 245      3A257520 
+ 245      54533A25 
+ 245      75205465 
+ 246 00f3 00       		.ascii	"\000"
+ 247              		.align	2
+ 248              	.LC13:
+ 249 00f4 5B25755D 		.ascii	"[%u] Read error\015\012\000"
+ 249      20526561 
+ 249      64206572 
+ 249      726F720D 
+ 249      0A00
+ 250 0106 0000     		.align	2
+ 251              	.LC14:
+ 252 0108 73746174 		.ascii	"stat\000"
+ 252      00
+ 253 010d 000000   		.align	2
+ 254              	.LC15:
+ 255 0110 72782E63 		.ascii	"rx.count: %u\015\012\000"
+ARM GAS  C:\Users\user\AppData\Local\Temp\ccdVR0NF.s 			page 7
+
+
+ 255      6F756E74 
+ 255      3A202575 
+ 255      0D0A00
+ 256 011f 00       		.align	2
+ 257              	.LC16:
+ 258 0120 72782E64 		.ascii	"rx.dropped: %u\015\012\000"
+ 258      726F7070 
+ 258      65643A20 
+ 258      25750D0A 
+ 258      00
+ 259 0131 000000   		.align	2
+ 260              	.LC17:
+ 261 0134 636C692E 		.ascii	"cli.overflow: %u\015\012\000"
+ 261      6F766572 
+ 261      666C6F77 
+ 261      3A202575 
+ 261      0D0A00
+ 262 0147 00       		.align	2
+ 263              	.LC18:
+ 264 0148 6C6F672E 		.ascii	"log.records: %u\015\012\000"
+ 264      7265636F 
+ 264      7264733A 
+ 264      2025750D 
+ 264      0A00
+ 265 015a 0000     		.align	2
+ 266              	.LC19:
+ 267 015c 556E6B6E 		.ascii	"Unknown command\015\012\000"
+ 267      6F776E20 
+ 267      636F6D6D 
+ 267      616E640D 
+ 267      0A00
+ 268              		.section	.text.CLI_Execute,"ax",%progbits
+ 269              		.align	1
+ 270              		.syntax unified
+ 271              		.thumb
+ 272              		.thumb_func
+ 274              	CLI_Execute:
+ 275              	.LVL15:
+ 276              	.LFB5:
+  43:app/src/cli_task.c **** 
+  44:app/src/cli_task.c **** /* 根據解析完畢的 argc 與 argv，比對並執行對應的系統指令邏輯 */
+  45:app/src/cli_task.c **** /* 新增 rx_buf 參數，讓 stat 指令可以取得環形緩衝區的狀態 */
+  46:app/src/cli_task.c **** static void CLI_Execute(int argc, char *argv[], RingBuffer_t *rx_buf) {
+ 277              		.loc 1 46 71 is_stmt 1 view -0
+ 278              		.cfi_startproc
+ 279              		@ args = 0, pretend = 0, frame = 24
+ 280              		@ frame_needed = 0, uses_anonymous_args = 0
+  47:app/src/cli_task.c ****     if (argc == 0) return;
+ 281              		.loc 1 47 5 view .LVU44
+ 282              		.loc 1 47 8 is_stmt 0 view .LVU45
+ 283 0000 0028     		cmp	r0, #0
+ 284 0002 00F0B980 		beq	.L46
+  46:app/src/cli_task.c ****     if (argc == 0) return;
+ 285              		.loc 1 46 71 view .LVU46
+ 286 0006 F0B5     		push	{r4, r5, r6, r7, lr}
+ 287              	.LCFI8:
+ 288              		.cfi_def_cfa_offset 20
+ARM GAS  C:\Users\user\AppData\Local\Temp\ccdVR0NF.s 			page 8
+
+
+ 289              		.cfi_offset 4, -20
+ 290              		.cfi_offset 5, -16
+ 291              		.cfi_offset 6, -12
+ 292              		.cfi_offset 7, -8
+ 293              		.cfi_offset 14, -4
+ 294 0008 8BB0     		sub	sp, sp, #44
+ 295              	.LCFI9:
+ 296              		.cfi_def_cfa_offset 64
+ 297 000a 0E46     		mov	r6, r1
+ 298 000c 1746     		mov	r7, r2
+ 299 000e 0546     		mov	r5, r0
+  48:app/src/cli_task.c **** 
+  49:app/src/cli_task.c ****     if (strcmp(argv[0], "help") == 0) {
+ 300              		.loc 1 49 5 is_stmt 1 view .LVU47
+ 301              		.loc 1 49 9 is_stmt 0 view .LVU48
+ 302 0010 0C68     		ldr	r4, [r1]
+ 303 0012 5A49     		ldr	r1, .L58
+ 304              	.LVL16:
+ 305              		.loc 1 49 9 view .LVU49
+ 306 0014 2046     		mov	r0, r4
+ 307              	.LVL17:
+ 308              		.loc 1 49 9 view .LVU50
+ 309 0016 FFF7FEFF 		bl	strcmp
+ 310              	.LVL18:
+ 311              		.loc 1 49 8 discriminator 1 view .LVU51
+ 312 001a 0028     		cmp	r0, #0
+ 313 001c 32D0     		beq	.L49
+  50:app/src/cli_task.c ****         CLI_Printf("Commands: help, read temp, dump [n], stat\r\n");
+  51:app/src/cli_task.c ****     } 
+  52:app/src/cli_task.c ****     else if (strcmp(argv[0], "read") == 0 && argc >= 2 && strcmp(argv[1], "temp") == 0) {
+ 314              		.loc 1 52 10 is_stmt 1 view .LVU52
+ 315              		.loc 1 52 14 is_stmt 0 view .LVU53
+ 316 001e 5849     		ldr	r1, .L58+4
+ 317 0020 2046     		mov	r0, r4
+ 318 0022 FFF7FEFF 		bl	strcmp
+ 319              	.LVL19:
+ 320              		.loc 1 52 13 discriminator 1 view .LVU54
+ 321 0026 30B9     		cbnz	r0, .L23
+ 322              		.loc 1 52 43 discriminator 2 view .LVU55
+ 323 0028 012D     		cmp	r5, #1
+ 324 002a 04DD     		ble	.L23
+ 325              		.loc 1 52 59 discriminator 3 view .LVU56
+ 326 002c 5549     		ldr	r1, .L58+8
+ 327 002e 7068     		ldr	r0, [r6, #4]
+ 328 0030 FFF7FEFF 		bl	strcmp
+ 329              	.LVL20:
+ 330              		.loc 1 52 56 discriminator 4 view .LVU57
+ 331 0034 58B3     		cbz	r0, .L50
+ 332              	.L23:
+  53:app/src/cli_task.c ****         int32_t temp;
+  54:app/src/cli_task.c ****         
+  55:app/src/cli_task.c ****         /* CLI_PortReadTempX100 改成 bool 回傳加出參數，以防 I2C 讀取失敗 */
+  56:app/src/cli_task.c ****         if (CLI_PortReadTempX100(&temp)) {
+  57:app/src/cli_task.c ****             uint32_t abs_temp;
+  58:app/src/cli_task.c ****             
+  59:app/src/cli_task.c ****             /* 處理負數溫度：避開 INT32_MIN 溢位 UB，先轉 unsigned 再取補數 */
+  60:app/src/cli_task.c ****             if (temp < 0) {
+ARM GAS  C:\Users\user\AppData\Local\Temp\ccdVR0NF.s 			page 9
+
+
+  61:app/src/cli_task.c ****                 abs_temp = 0u - (uint32_t)temp;
+  62:app/src/cli_task.c ****             } else {
+  63:app/src/cli_task.c ****                 abs_temp = (uint32_t)temp;
+  64:app/src/cli_task.c ****             }
+  65:app/src/cli_task.c ****             
+  66:app/src/cli_task.c ****             CLI_Printf("Temp: %s%u.%02u\r\n", (temp < 0) ? "-" : "", abs_temp / 100, abs_temp % 100
+  67:app/src/cli_task.c ****         } else {
+  68:app/src/cli_task.c ****             CLI_Printf("Error: I2C Sensor read failed\r\n");
+  69:app/src/cli_task.c ****         }
+  70:app/src/cli_task.c ****     } 
+  71:app/src/cli_task.c ****     else if (strcmp(argv[0], "dump") == 0) {
+ 333              		.loc 1 71 10 is_stmt 1 view .LVU58
+ 334              		.loc 1 71 14 is_stmt 0 view .LVU59
+ 335 0036 5449     		ldr	r1, .L58+12
+ 336 0038 2046     		mov	r0, r4
+ 337 003a FFF7FEFF 		bl	strcmp
+ 338              	.LVL21:
+ 339              		.loc 1 71 13 discriminator 1 view .LVU60
+ 340 003e 0028     		cmp	r0, #0
+ 341 0040 43D0     		beq	.L51
+  72:app/src/cli_task.c ****         uint32_t total = CLI_PortLogCount();
+  73:app/src/cli_task.c ****         
+  74:app/src/cli_task.c ****         /* dump : total == 0 要先印 "no record" 就 return，避免無號數環繞 */
+  75:app/src/cli_task.c ****         if (total == 0) {
+  76:app/src/cli_task.c ****             CLI_Printf("no record\r\n");
+  77:app/src/cli_task.c ****             return;
+  78:app/src/cli_task.c ****         }
+  79:app/src/cli_task.c **** 
+  80:app/src/cli_task.c ****         uint32_t n = 20; // 預設 20 筆
+  81:app/src/cli_task.c ****         if (argc >= 2) {
+  82:app/src/cli_task.c ****             /* dump 0 要拒絕: ParseU32 失敗或 n==0 都報錯 */
+  83:app/src/cli_task.c ****             if (!ParseU32(argv[1], &n) || n == 0) {
+  84:app/src/cli_task.c ****                 CLI_Printf("Invalid number\r\n");
+  85:app/src/cli_task.c ****                 return;
+  86:app/src/cli_task.c ****             }
+  87:app/src/cli_task.c ****         }
+  88:app/src/cli_task.c ****         if (n > total) n = total;
+  89:app/src/cli_task.c ****         
+  90:app/src/cli_task.c ****         uint32_t first = total - n;
+  91:app/src/cli_task.c ****         CLI_Printf("Dumping logs %u to %u...\r\n", first, total - 1);
+  92:app/src/cli_task.c ****         
+  93:app/src/cli_task.c ****         /* 實際呼叫 CLI_PortLogRead 逐筆撈取 */
+  94:app/src/cli_task.c ****         for (uint32_t i = first; i < total; i++) {
+  95:app/src/cli_task.c ****             CLI_LogRecord_t rec;
+  96:app/src/cli_task.c ****             if (CLI_PortLogRead(i, &rec)) {
+  97:app/src/cli_task.c ****                 uint32_t abs_temp = (rec.temp_x100 < 0) ? (0u - (uint32_t)rec.temp_x100) : (uint32_
+  98:app/src/cli_task.c ****                 CLI_Printf("[%u] Seq:%u TS:%u Temp:%s%u.%02u Flags:0x%02X\r\n",
+  99:app/src/cli_task.c ****                            i, rec.seq, rec.timestamp,
+ 100:app/src/cli_task.c ****                            (rec.temp_x100 < 0) ? "-" : "", abs_temp / 100, abs_temp % 100, rec.flag
+ 101:app/src/cli_task.c ****             } else {
+ 102:app/src/cli_task.c ****                 CLI_Printf("[%u] Read error\r\n", i);
+ 103:app/src/cli_task.c ****             }
+ 104:app/src/cli_task.c ****         }
+ 105:app/src/cli_task.c ****     } 
+ 106:app/src/cli_task.c ****     else if (strcmp(argv[0], "stat") == 0) {
+ 342              		.loc 1 106 10 is_stmt 1 view .LVU61
+ 343              		.loc 1 106 14 is_stmt 0 view .LVU62
+ARM GAS  C:\Users\user\AppData\Local\Temp\ccdVR0NF.s 			page 10
+
+
+ 344 0042 5249     		ldr	r1, .L58+16
+ 345 0044 2046     		mov	r0, r4
+ 346 0046 FFF7FEFF 		bl	strcmp
+ 347              	.LVL22:
+ 348              		.loc 1 106 13 discriminator 1 view .LVU63
+ 349 004a 0028     		cmp	r0, #0
+ 350 004c 40F09080 		bne	.L42
+ 107:app/src/cli_task.c ****         /* stat 印 rx.count / rx.dropped / cli.overflow / log.records */
+ 108:app/src/cli_task.c ****         CLI_Printf("rx.count: %u\r\n", RingBuffer_Count(rx_buf));
+ 351              		.loc 1 108 9 is_stmt 1 view .LVU64
+ 352 0050 3846     		mov	r0, r7
+ 353 0052 FFF7FEFF 		bl	RingBuffer_Count
+ 354              	.LVL23:
+ 355 0056 0146     		mov	r1, r0
+ 356              		.loc 1 108 9 is_stmt 0 discriminator 1 view .LVU65
+ 357 0058 4D48     		ldr	r0, .L58+20
+ 358 005a FFF7FEFF 		bl	CLI_Printf
+ 359              	.LVL24:
+ 109:app/src/cli_task.c ****         CLI_Printf("rx.dropped: %u\r\n", RingBuffer_Dropped(rx_buf));
+ 360              		.loc 1 109 9 is_stmt 1 view .LVU66
+ 361 005e 3846     		mov	r0, r7
+ 362 0060 FFF7FEFF 		bl	RingBuffer_Dropped
+ 363              	.LVL25:
+ 364 0064 0146     		mov	r1, r0
+ 365              		.loc 1 109 9 is_stmt 0 discriminator 1 view .LVU67
+ 366 0066 4B48     		ldr	r0, .L58+24
+ 367 0068 FFF7FEFF 		bl	CLI_Printf
+ 368              	.LVL26:
+ 110:app/src/cli_task.c ****         CLI_Printf("cli.overflow: %u\r\n", cli_overflow_count);
+ 369              		.loc 1 110 9 is_stmt 1 view .LVU68
+ 370 006c 4A4B     		ldr	r3, .L58+28
+ 371 006e 1968     		ldr	r1, [r3]
+ 372 0070 4A48     		ldr	r0, .L58+32
+ 373 0072 FFF7FEFF 		bl	CLI_Printf
+ 374              	.LVL27:
+ 111:app/src/cli_task.c ****         CLI_Printf("log.records: %u\r\n", CLI_PortLogCount());
+ 375              		.loc 1 111 9 view .LVU69
+ 376 0076 FFF7FEFF 		bl	CLI_PortLogCount
+ 377              	.LVL28:
+ 378 007a 0146     		mov	r1, r0
+ 379              		.loc 1 111 9 is_stmt 0 discriminator 1 view .LVU70
+ 380 007c 4848     		ldr	r0, .L58+36
+ 381 007e FFF7FEFF 		bl	CLI_Printf
+ 382              	.LVL29:
+ 383 0082 02E0     		b	.L20
+ 384              	.L49:
+  50:app/src/cli_task.c ****     } 
+ 385              		.loc 1 50 9 is_stmt 1 view .LVU71
+ 386 0084 4748     		ldr	r0, .L58+40
+ 387 0086 FFF7FEFF 		bl	CLI_Printf
+ 388              	.LVL30:
+ 389              	.L20:
+ 112:app/src/cli_task.c ****     } 
+ 113:app/src/cli_task.c ****     else {
+ 114:app/src/cli_task.c ****         CLI_Printf("Unknown command\r\n");
+ 115:app/src/cli_task.c ****     }
+ 116:app/src/cli_task.c **** }
+ARM GAS  C:\Users\user\AppData\Local\Temp\ccdVR0NF.s 			page 11
+
+
+ 390              		.loc 1 116 1 is_stmt 0 view .LVU72
+ 391 008a 0BB0     		add	sp, sp, #44
+ 392              	.LCFI10:
+ 393              		.cfi_remember_state
+ 394              		.cfi_def_cfa_offset 20
+ 395              		@ sp needed
+ 396 008c F0BD     		pop	{r4, r5, r6, r7, pc}
+ 397              	.LVL31:
+ 398              	.L50:
+ 399              	.LCFI11:
+ 400              		.cfi_restore_state
+ 401              	.LBB4:
+  53:app/src/cli_task.c ****         
+ 402              		.loc 1 53 9 is_stmt 1 view .LVU73
+  56:app/src/cli_task.c ****             uint32_t abs_temp;
+ 403              		.loc 1 56 9 view .LVU74
+  56:app/src/cli_task.c ****             uint32_t abs_temp;
+ 404              		.loc 1 56 13 is_stmt 0 view .LVU75
+ 405 008e 06A8     		add	r0, sp, #24
+ 406 0090 FFF7FEFF 		bl	CLI_PortReadTempX100
+ 407              	.LVL32:
+  56:app/src/cli_task.c ****             uint32_t abs_temp;
+ 408              		.loc 1 56 12 discriminator 1 view .LVU76
+ 409 0094 A8B1     		cbz	r0, .L24
+ 410              	.LBB5:
+  57:app/src/cli_task.c ****             
+ 411              		.loc 1 57 13 is_stmt 1 view .LVU77
+  60:app/src/cli_task.c ****                 abs_temp = 0u - (uint32_t)temp;
+ 412              		.loc 1 60 13 view .LVU78
+  60:app/src/cli_task.c ****                 abs_temp = 0u - (uint32_t)temp;
+ 413              		.loc 1 60 22 is_stmt 0 view .LVU79
+ 414 0096 069A     		ldr	r2, [sp, #24]
+  60:app/src/cli_task.c ****                 abs_temp = 0u - (uint32_t)temp;
+ 415              		.loc 1 60 16 view .LVU80
+ 416 0098 002A     		cmp	r2, #0
+ 417 009a 0EDB     		blt	.L52
+  63:app/src/cli_task.c ****             }
+ 418              		.loc 1 63 17 is_stmt 1 view .LVU81
+  63:app/src/cli_task.c ****             }
+ 419              		.loc 1 63 26 is_stmt 0 view .LVU82
+ 420 009c 1346     		mov	r3, r2
+ 421              	.L26:
+ 422              	.LVL33:
+  66:app/src/cli_task.c ****         } else {
+ 423              		.loc 1 66 13 is_stmt 1 view .LVU83
+ 424 009e 002A     		cmp	r2, #0
+ 425 00a0 0DDB     		blt	.L53
+  66:app/src/cli_task.c ****         } else {
+ 426              		.loc 1 66 13 is_stmt 0 discriminator 2 view .LVU84
+ 427 00a2 4149     		ldr	r1, .L58+44
+ 428              	.L27:
+  66:app/src/cli_task.c ****         } else {
+ 429              		.loc 1 66 13 discriminator 4 view .LVU85
+ 430 00a4 414A     		ldr	r2, .L58+48
+ 431 00a6 A2FB0302 		umull	r0, r2, r2, r3
+ 432 00aa 5209     		lsrs	r2, r2, #5
+ 433 00ac 6420     		movs	r0, #100
+ARM GAS  C:\Users\user\AppData\Local\Temp\ccdVR0NF.s 			page 12
+
+
+ 434 00ae 00FB1233 		mls	r3, r0, r2, r3
+ 435              	.LVL34:
+  66:app/src/cli_task.c ****         } else {
+ 436              		.loc 1 66 13 discriminator 4 view .LVU86
+ 437 00b2 3F48     		ldr	r0, .L58+52
+ 438 00b4 FFF7FEFF 		bl	CLI_Printf
+ 439              	.LVL35:
+ 440              	.LBE5:
+ 441 00b8 E7E7     		b	.L20
+ 442              	.LVL36:
+ 443              	.L52:
+ 444              	.LBB6:
+  61:app/src/cli_task.c ****             } else {
+ 445              		.loc 1 61 17 is_stmt 1 view .LVU87
+  61:app/src/cli_task.c ****             } else {
+ 446              		.loc 1 61 26 is_stmt 0 view .LVU88
+ 447 00ba 5342     		rsbs	r3, r2, #0
+ 448              	.LVL37:
+  61:app/src/cli_task.c ****             } else {
+ 449              		.loc 1 61 26 view .LVU89
+ 450 00bc EFE7     		b	.L26
+ 451              	.L53:
+  66:app/src/cli_task.c ****         } else {
+ 452              		.loc 1 66 13 discriminator 1 view .LVU90
+ 453 00be 3D49     		ldr	r1, .L58+56
+ 454 00c0 F0E7     		b	.L27
+ 455              	.LVL38:
+ 456              	.L24:
+  66:app/src/cli_task.c ****         } else {
+ 457              		.loc 1 66 13 discriminator 1 view .LVU91
+ 458              	.LBE6:
+  68:app/src/cli_task.c ****         }
+ 459              		.loc 1 68 13 is_stmt 1 view .LVU92
+ 460 00c2 3D48     		ldr	r0, .L58+60
+ 461 00c4 FFF7FEFF 		bl	CLI_Printf
+ 462              	.LVL39:
+ 463              	.LBE4:
+  52:app/src/cli_task.c ****         int32_t temp;
+ 464              		.loc 1 52 89 is_stmt 0 view .LVU93
+ 465 00c8 DFE7     		b	.L20
+ 466              	.L51:
+ 467              	.LBB7:
+  72:app/src/cli_task.c ****         
+ 468              		.loc 1 72 9 is_stmt 1 view .LVU94
+  72:app/src/cli_task.c ****         
+ 469              		.loc 1 72 26 is_stmt 0 view .LVU95
+ 470 00ca FFF7FEFF 		bl	CLI_PortLogCount
+ 471              	.LVL40:
+  75:app/src/cli_task.c ****             CLI_Printf("no record\r\n");
+ 472              		.loc 1 75 9 is_stmt 1 view .LVU96
+  75:app/src/cli_task.c ****             CLI_Printf("no record\r\n");
+ 473              		.loc 1 75 12 is_stmt 0 view .LVU97
+ 474 00ce 0746     		mov	r7, r0
+ 475              	.LVL41:
+  75:app/src/cli_task.c ****             CLI_Printf("no record\r\n");
+ 476              		.loc 1 75 12 view .LVU98
+ 477 00d0 78B1     		cbz	r0, .L54
+ARM GAS  C:\Users\user\AppData\Local\Temp\ccdVR0NF.s 			page 13
+
+
+  80:app/src/cli_task.c ****         if (argc >= 2) {
+ 478              		.loc 1 80 9 is_stmt 1 view .LVU99
+  80:app/src/cli_task.c ****         if (argc >= 2) {
+ 479              		.loc 1 80 18 is_stmt 0 view .LVU100
+ 480 00d2 1423     		movs	r3, #20
+ 481 00d4 0593     		str	r3, [sp, #20]
+  81:app/src/cli_task.c ****             /* dump 0 要拒絕: ParseU32 失敗或 n==0 都報錯 */
+ 482              		.loc 1 81 9 is_stmt 1 view .LVU101
+  81:app/src/cli_task.c ****             /* dump 0 要拒絕: ParseU32 失敗或 n==0 都報錯 */
+ 483              		.loc 1 81 12 is_stmt 0 view .LVU102
+ 484 00d6 012D     		cmp	r5, #1
+ 485 00d8 0FDC     		bgt	.L55
+ 486              	.LVL42:
+ 487              	.L32:
+  88:app/src/cli_task.c ****         
+ 488              		.loc 1 88 9 is_stmt 1 view .LVU103
+  88:app/src/cli_task.c ****         
+ 489              		.loc 1 88 15 is_stmt 0 view .LVU104
+ 490 00da 059B     		ldr	r3, [sp, #20]
+  88:app/src/cli_task.c ****         
+ 491              		.loc 1 88 12 view .LVU105
+ 492 00dc BB42     		cmp	r3, r7
+ 493 00de 00D9     		bls	.L34
+  88:app/src/cli_task.c ****         
+ 494              		.loc 1 88 24 is_stmt 1 discriminator 1 view .LVU106
+  88:app/src/cli_task.c ****         
+ 495              		.loc 1 88 26 is_stmt 0 discriminator 1 view .LVU107
+ 496 00e0 0597     		str	r7, [sp, #20]
+ 497              	.L34:
+  90:app/src/cli_task.c ****         CLI_Printf("Dumping logs %u to %u...\r\n", first, total - 1);
+ 498              		.loc 1 90 9 is_stmt 1 view .LVU108
+  90:app/src/cli_task.c ****         CLI_Printf("Dumping logs %u to %u...\r\n", first, total - 1);
+ 499              		.loc 1 90 32 is_stmt 0 view .LVU109
+ 500 00e2 059C     		ldr	r4, [sp, #20]
+  90:app/src/cli_task.c ****         CLI_Printf("Dumping logs %u to %u...\r\n", first, total - 1);
+ 501              		.loc 1 90 18 view .LVU110
+ 502 00e4 3C1B     		subs	r4, r7, r4
+ 503              	.LVL43:
+  91:app/src/cli_task.c ****         
+ 504              		.loc 1 91 9 is_stmt 1 view .LVU111
+ 505 00e6 7A1E     		subs	r2, r7, #1
+ 506 00e8 2146     		mov	r1, r4
+ 507 00ea 3448     		ldr	r0, .L58+64
+ 508 00ec FFF7FEFF 		bl	CLI_Printf
+ 509              	.LVL44:
+  94:app/src/cli_task.c ****             CLI_LogRecord_t rec;
+ 510              		.loc 1 94 9 view .LVU112
+ 511              	.LBB8:
+  94:app/src/cli_task.c ****             CLI_LogRecord_t rec;
+ 512              		.loc 1 94 14 view .LVU113
+  94:app/src/cli_task.c ****             CLI_LogRecord_t rec;
+ 513              		.loc 1 94 9 is_stmt 0 view .LVU114
+ 514 00f0 27E0     		b	.L35
+ 515              	.LVL45:
+ 516              	.L54:
+  94:app/src/cli_task.c ****             CLI_LogRecord_t rec;
+ 517              		.loc 1 94 9 view .LVU115
+ARM GAS  C:\Users\user\AppData\Local\Temp\ccdVR0NF.s 			page 14
+
+
+ 518              	.LBE8:
+  76:app/src/cli_task.c ****             return;
+ 519              		.loc 1 76 13 is_stmt 1 view .LVU116
+ 520 00f2 3348     		ldr	r0, .L58+68
+ 521              	.LVL46:
+  76:app/src/cli_task.c ****             return;
+ 522              		.loc 1 76 13 is_stmt 0 view .LVU117
+ 523 00f4 FFF7FEFF 		bl	CLI_Printf
+ 524              	.LVL47:
+  77:app/src/cli_task.c ****         }
+ 525              		.loc 1 77 13 is_stmt 1 view .LVU118
+ 526 00f8 C7E7     		b	.L20
+ 527              	.LVL48:
+ 528              	.L55:
+  83:app/src/cli_task.c ****                 CLI_Printf("Invalid number\r\n");
+ 529              		.loc 1 83 13 view .LVU119
+  83:app/src/cli_task.c ****                 CLI_Printf("Invalid number\r\n");
+ 530              		.loc 1 83 18 is_stmt 0 view .LVU120
+ 531 00fa 05A9     		add	r1, sp, #20
+ 532 00fc 7068     		ldr	r0, [r6, #4]
+ 533              	.LVL49:
+  83:app/src/cli_task.c ****                 CLI_Printf("Invalid number\r\n");
+ 534              		.loc 1 83 18 view .LVU121
+ 535 00fe FFF7FEFF 		bl	ParseU32
+ 536              	.LVL50:
+  83:app/src/cli_task.c ****                 CLI_Printf("Invalid number\r\n");
+ 537              		.loc 1 83 16 discriminator 1 view .LVU122
+ 538 0102 10B1     		cbz	r0, .L33
+  83:app/src/cli_task.c ****                 CLI_Printf("Invalid number\r\n");
+ 539              		.loc 1 83 45 discriminator 2 view .LVU123
+ 540 0104 059B     		ldr	r3, [sp, #20]
+  83:app/src/cli_task.c ****                 CLI_Printf("Invalid number\r\n");
+ 541              		.loc 1 83 40 discriminator 2 view .LVU124
+ 542 0106 002B     		cmp	r3, #0
+ 543 0108 E7D1     		bne	.L32
+ 544              	.L33:
+  84:app/src/cli_task.c ****                 return;
+ 545              		.loc 1 84 17 is_stmt 1 view .LVU125
+ 546 010a 2E48     		ldr	r0, .L58+72
+ 547 010c FFF7FEFF 		bl	CLI_Printf
+ 548              	.LVL51:
+  85:app/src/cli_task.c ****             }
+ 549              		.loc 1 85 17 view .LVU126
+ 550 0110 BBE7     		b	.L20
+ 551              	.LVL52:
+ 552              	.L56:
+ 553              	.LBB13:
+ 554              	.LBB9:
+ 555              	.LBB10:
+  97:app/src/cli_task.c ****                 CLI_Printf("[%u] Seq:%u TS:%u Temp:%s%u.%02u Flags:0x%02X\r\n",
+ 556              		.loc 1 97 26 is_stmt 0 discriminator 1 view .LVU127
+ 557 0112 4842     		rsbs	r0, r1, #0
+ 558              	.LVL53:
+  97:app/src/cli_task.c ****                 CLI_Printf("[%u] Seq:%u TS:%u Temp:%s%u.%02u Flags:0x%02X\r\n",
+ 559              		.loc 1 97 26 discriminator 1 view .LVU128
+ 560 0114 20E0     		b	.L38
+ 561              	.L57:
+ARM GAS  C:\Users\user\AppData\Local\Temp\ccdVR0NF.s 			page 15
+
+
+  98:app/src/cli_task.c ****                            i, rec.seq, rec.timestamp,
+ 562              		.loc 1 98 17 discriminator 1 view .LVU129
+ 563 0116 DFF89CC0 		ldr	ip, .L58+56
+ 564              	.L39:
+ 100:app/src/cli_task.c ****             } else {
+ 565              		.loc 1 100 95 view .LVU130
+ 566 011a 9DF82410 		ldrb	r1, [sp, #36]	@ zero_extendqisi2
+  98:app/src/cli_task.c ****                            i, rec.seq, rec.timestamp,
+ 567              		.loc 1 98 17 discriminator 4 view .LVU131
+ 568 011e 0391     		str	r1, [sp, #12]
+ 569 0120 2249     		ldr	r1, .L58+48
+ 570 0122 A1FB00E1 		umull	lr, r1, r1, r0
+ 571 0126 4909     		lsrs	r1, r1, #5
+ 572 0128 4FF0640E 		mov	lr, #100
+ 573 012c 0EFB1100 		mls	r0, lr, r1, r0
+ 574              	.LVL54:
+  98:app/src/cli_task.c ****                            i, rec.seq, rec.timestamp,
+ 575              		.loc 1 98 17 discriminator 4 view .LVU132
+ 576 0130 0290     		str	r0, [sp, #8]
+ 577 0132 0191     		str	r1, [sp, #4]
+ 578 0134 CDF800C0 		str	ip, [sp]
+ 579 0138 2146     		mov	r1, r4
+ 580 013a 2348     		ldr	r0, .L58+76
+ 581 013c FFF7FEFF 		bl	CLI_Printf
+ 582              	.LVL55:
+ 583              	.L40:
+  98:app/src/cli_task.c ****                            i, rec.seq, rec.timestamp,
+ 584              		.loc 1 98 17 discriminator 4 view .LVU133
+ 585              	.LBE10:
+ 586              	.LBE9:
+  94:app/src/cli_task.c ****             CLI_LogRecord_t rec;
+ 587              		.loc 1 94 46 is_stmt 1 discriminator 2 view .LVU134
+ 588 0140 0134     		adds	r4, r4, #1
+ 589              	.LVL56:
+ 590              	.L35:
+  94:app/src/cli_task.c ****             CLI_LogRecord_t rec;
+ 591              		.loc 1 94 36 discriminator 1 view .LVU135
+ 592 0142 BC42     		cmp	r4, r7
+ 593 0144 A1D2     		bcs	.L20
+ 594              	.LBB12:
+  95:app/src/cli_task.c ****             if (CLI_PortLogRead(i, &rec)) {
+ 595              		.loc 1 95 13 view .LVU136
+  96:app/src/cli_task.c ****                 uint32_t abs_temp = (rec.temp_x100 < 0) ? (0u - (uint32_t)rec.temp_x100) : (uint32_
+ 596              		.loc 1 96 13 view .LVU137
+  96:app/src/cli_task.c ****                 uint32_t abs_temp = (rec.temp_x100 < 0) ? (0u - (uint32_t)rec.temp_x100) : (uint32_
+ 597              		.loc 1 96 17 is_stmt 0 view .LVU138
+ 598 0146 06A9     		add	r1, sp, #24
+ 599 0148 2046     		mov	r0, r4
+ 600 014a FFF7FEFF 		bl	CLI_PortLogRead
+ 601              	.LVL57:
+  96:app/src/cli_task.c ****                 uint32_t abs_temp = (rec.temp_x100 < 0) ? (0u - (uint32_t)rec.temp_x100) : (uint32_
+ 602              		.loc 1 96 16 discriminator 1 view .LVU139
+ 603 014e 50B1     		cbz	r0, .L36
+ 604              	.LBB11:
+  97:app/src/cli_task.c ****                 CLI_Printf("[%u] Seq:%u TS:%u Temp:%s%u.%02u Flags:0x%02X\r\n",
+ 605              		.loc 1 97 17 is_stmt 1 view .LVU140
+  97:app/src/cli_task.c ****                 CLI_Printf("[%u] Seq:%u TS:%u Temp:%s%u.%02u Flags:0x%02X\r\n",
+ARM GAS  C:\Users\user\AppData\Local\Temp\ccdVR0NF.s 			page 16
+
+
+ 606              		.loc 1 97 41 is_stmt 0 view .LVU141
+ 607 0150 0899     		ldr	r1, [sp, #32]
+  97:app/src/cli_task.c ****                 CLI_Printf("[%u] Seq:%u TS:%u Temp:%s%u.%02u Flags:0x%02X\r\n",
+ 608              		.loc 1 97 90 view .LVU142
+ 609 0152 0029     		cmp	r1, #0
+ 610 0154 DDDB     		blt	.L56
+  97:app/src/cli_task.c ****                 CLI_Printf("[%u] Seq:%u TS:%u Temp:%s%u.%02u Flags:0x%02X\r\n",
+ 611              		.loc 1 97 26 discriminator 2 view .LVU143
+ 612 0156 0846     		mov	r0, r1
+ 613              	.L38:
+ 614              	.LVL58:
+  98:app/src/cli_task.c ****                            i, rec.seq, rec.timestamp,
+ 615              		.loc 1 98 17 is_stmt 1 view .LVU144
+ 616 0158 069A     		ldr	r2, [sp, #24]
+ 617 015a 079B     		ldr	r3, [sp, #28]
+ 618 015c 0029     		cmp	r1, #0
+ 619 015e DADB     		blt	.L57
+  98:app/src/cli_task.c ****                            i, rec.seq, rec.timestamp,
+ 620              		.loc 1 98 17 is_stmt 0 discriminator 2 view .LVU145
+ 621 0160 DFF844C0 		ldr	ip, .L58+44
+ 622 0164 D9E7     		b	.L39
+ 623              	.LVL59:
+ 624              	.L36:
+  98:app/src/cli_task.c ****                            i, rec.seq, rec.timestamp,
+ 625              		.loc 1 98 17 discriminator 2 view .LVU146
+ 626              	.LBE11:
+ 102:app/src/cli_task.c ****             }
+ 627              		.loc 1 102 17 is_stmt 1 view .LVU147
+ 628 0166 2146     		mov	r1, r4
+ 629 0168 1848     		ldr	r0, .L58+80
+ 630 016a FFF7FEFF 		bl	CLI_Printf
+ 631              	.LVL60:
+ 632 016e E7E7     		b	.L40
+ 633              	.LVL61:
+ 634              	.L42:
+ 102:app/src/cli_task.c ****             }
+ 635              		.loc 1 102 17 is_stmt 0 view .LVU148
+ 636              	.LBE12:
+ 637              	.LBE13:
+ 638              	.LBE7:
+ 114:app/src/cli_task.c ****     }
+ 639              		.loc 1 114 9 is_stmt 1 view .LVU149
+ 640 0170 1748     		ldr	r0, .L58+84
+ 641 0172 FFF7FEFF 		bl	CLI_Printf
+ 642              	.LVL62:
+ 643 0176 88E7     		b	.L20
+ 644              	.LVL63:
+ 645              	.L46:
+ 646              	.LCFI12:
+ 647              		.cfi_def_cfa_offset 0
+ 648              		.cfi_restore 4
+ 649              		.cfi_restore 5
+ 650              		.cfi_restore 6
+ 651              		.cfi_restore 7
+ 652              		.cfi_restore 14
+ 114:app/src/cli_task.c ****     }
+ 653              		.loc 1 114 9 is_stmt 0 view .LVU150
+ARM GAS  C:\Users\user\AppData\Local\Temp\ccdVR0NF.s 			page 17
+
+
+ 654 0178 7047     		bx	lr
+ 655              	.L59:
+ 656 017a 00BF     		.align	2
+ 657              	.L58:
+ 658 017c 08000000 		.word	.LC2
+ 659 0180 3C000000 		.word	.LC4
+ 660 0184 44000000 		.word	.LC5
+ 661 0188 80000000 		.word	.LC8
+ 662 018c 08010000 		.word	.LC14
+ 663 0190 10010000 		.word	.LC15
+ 664 0194 20010000 		.word	.LC16
+ 665 0198 00000000 		.word	cli_overflow_count
+ 666 019c 34010000 		.word	.LC17
+ 667 01a0 48010000 		.word	.LC18
+ 668 01a4 10000000 		.word	.LC3
+ 669 01a8 04000000 		.word	.LC1
+ 670 01ac 1F85EB51 		.word	1374389535
+ 671 01b0 4C000000 		.word	.LC6
+ 672 01b4 00000000 		.word	.LC0
+ 673 01b8 60000000 		.word	.LC7
+ 674 01bc A8000000 		.word	.LC11
+ 675 01c0 88000000 		.word	.LC9
+ 676 01c4 94000000 		.word	.LC10
+ 677 01c8 C4000000 		.word	.LC12
+ 678 01cc F4000000 		.word	.LC13
+ 679 01d0 5C010000 		.word	.LC19
+ 680              		.cfi_endproc
+ 681              	.LFE5:
+ 683              		.section	.text.CLI_ParseAndExecute,"ax",%progbits
+ 684              		.align	1
+ 685              		.syntax unified
+ 686              		.thumb
+ 687              		.thumb_func
+ 689              	CLI_ParseAndExecute:
+ 690              	.LVL64:
+ 691              	.LFB6:
+ 117:app/src/cli_task.c **** 
+ 118:app/src/cli_task.c **** /* 自定義 Tokenizer：以空白與 Tab 為分隔符切分指令行，並轉交給執行器 */
+ 119:app/src/cli_task.c **** static void CLI_ParseAndExecute(char *line, RingBuffer_t *rx_buf) {
+ 692              		.loc 1 119 67 is_stmt 1 view -0
+ 693              		.cfi_startproc
+ 694              		@ args = 0, pretend = 0, frame = 24
+ 695              		@ frame_needed = 0, uses_anonymous_args = 0
+ 696              		.loc 1 119 67 is_stmt 0 view .LVU152
+ 697 0000 00B5     		push	{lr}
+ 698              	.LCFI13:
+ 699              		.cfi_def_cfa_offset 4
+ 700              		.cfi_offset 14, -4
+ 701 0002 87B0     		sub	sp, sp, #28
+ 702              	.LCFI14:
+ 703              		.cfi_def_cfa_offset 32
+ 704 0004 0346     		mov	r3, r0
+ 705 0006 0A46     		mov	r2, r1
+ 120:app/src/cli_task.c ****     char *argv[MAX_ARGS];
+ 706              		.loc 1 120 5 is_stmt 1 view .LVU153
+ 121:app/src/cli_task.c ****     int argc = 0;
+ 707              		.loc 1 121 5 view .LVU154
+ARM GAS  C:\Users\user\AppData\Local\Temp\ccdVR0NF.s 			page 18
+
+
+ 708              	.LVL65:
+ 122:app/src/cli_task.c ****     char *p = line;
+ 709              		.loc 1 122 5 view .LVU155
+ 123:app/src/cli_task.c **** 
+ 124:app/src/cli_task.c ****     while (*p) {
+ 710              		.loc 1 124 5 view .LVU156
+ 121:app/src/cli_task.c ****     char *p = line;
+ 711              		.loc 1 121 9 is_stmt 0 view .LVU157
+ 712 0008 0020     		movs	r0, #0
+ 713              	.LVL66:
+ 714              		.loc 1 124 11 view .LVU158
+ 715 000a 1BE0     		b	.L61
+ 716              	.LVL67:
+ 717              	.L62:
+ 125:app/src/cli_task.c ****         while (*p == ' ' || *p == '\t') p++;
+ 718              		.loc 1 125 41 is_stmt 1 discriminator 4 view .LVU159
+ 719              		.loc 1 125 42 is_stmt 0 discriminator 4 view .LVU160
+ 720 000c 0133     		adds	r3, r3, #1
+ 721              	.LVL68:
+ 722              	.L69:
+ 723              		.loc 1 125 26 is_stmt 1 discriminator 1 view .LVU161
+ 724              		.loc 1 125 16 is_stmt 0 discriminator 1 view .LVU162
+ 725 000e 1978     		ldrb	r1, [r3]	@ zero_extendqisi2
+ 726              		.loc 1 125 26 discriminator 1 view .LVU163
+ 727 0010 2029     		cmp	r1, #32
+ 728 0012 FBD0     		beq	.L62
+ 729              		.loc 1 125 26 discriminator 3 view .LVU164
+ 730 0014 0929     		cmp	r1, #9
+ 731 0016 F9D0     		beq	.L62
+ 126:app/src/cli_task.c ****         if (*p == '\0') break;
+ 732              		.loc 1 126 9 is_stmt 1 view .LVU165
+ 733              		.loc 1 126 12 is_stmt 0 view .LVU166
+ 734 0018 B9B1     		cbz	r1, .L63
+ 127:app/src/cli_task.c ****         
+ 128:app/src/cli_task.c ****         if (argc < MAX_ARGS) argv[argc++] = p;
+ 735              		.loc 1 128 9 is_stmt 1 view .LVU167
+ 736              		.loc 1 128 12 is_stmt 0 view .LVU168
+ 737 001a 0428     		cmp	r0, #4
+ 738 001c 05DC     		bgt	.L65
+ 739              		.loc 1 128 30 is_stmt 1 discriminator 1 view .LVU169
+ 740              	.LVL69:
+ 741              		.loc 1 128 43 is_stmt 0 discriminator 1 view .LVU170
+ 742 001e 06A9     		add	r1, sp, #24
+ 743 0020 01EB800C 		add	ip, r1, r0, lsl #2
+ 744 0024 4CF8143C 		str	r3, [ip, #-20]
+ 745              		.loc 1 128 39 discriminator 1 view .LVU171
+ 746 0028 0130     		adds	r0, r0, #1
+ 747              	.LVL70:
+ 748              	.L65:
+ 129:app/src/cli_task.c ****         
+ 130:app/src/cli_task.c ****         while (*p && *p != ' ' && *p != '\t') p++;
+ 749              		.loc 1 130 32 is_stmt 1 discriminator 1 view .LVU172
+ 750              		.loc 1 130 16 is_stmt 0 discriminator 1 view .LVU173
+ 751 002a 1978     		ldrb	r1, [r3]	@ zero_extendqisi2
+ 752              		.loc 1 130 32 discriminator 1 view .LVU174
+ 753 002c 29B1     		cbz	r1, .L66
+ 754              		.loc 1 130 19 discriminator 2 view .LVU175
+ARM GAS  C:\Users\user\AppData\Local\Temp\ccdVR0NF.s 			page 19
+
+
+ 755 002e 2029     		cmp	r1, #32
+ 756 0030 03D0     		beq	.L66
+ 757              		.loc 1 130 32 discriminator 3 view .LVU176
+ 758 0032 0929     		cmp	r1, #9
+ 759 0034 01D0     		beq	.L66
+ 760              		.loc 1 130 47 is_stmt 1 discriminator 4 view .LVU177
+ 761              		.loc 1 130 48 is_stmt 0 discriminator 4 view .LVU178
+ 762 0036 0133     		adds	r3, r3, #1
+ 763              	.LVL71:
+ 764              		.loc 1 130 48 discriminator 4 view .LVU179
+ 765 0038 F7E7     		b	.L65
+ 766              	.LVL72:
+ 767              	.L66:
+ 131:app/src/cli_task.c ****         if (*p) {
+ 768              		.loc 1 131 9 is_stmt 1 view .LVU180
+ 769              		.loc 1 131 12 is_stmt 0 view .LVU181
+ 770 003a 19B1     		cbz	r1, .L61
+ 132:app/src/cli_task.c ****             *p = '\0';
+ 771              		.loc 1 132 13 is_stmt 1 view .LVU182
+ 772              		.loc 1 132 16 is_stmt 0 view .LVU183
+ 773 003c 4FF0000C 		mov	ip, #0
+ 774 0040 03F801CB 		strb	ip, [r3], #1
+ 775              	.LVL73:
+ 133:app/src/cli_task.c ****             p++;
+ 776              		.loc 1 133 13 is_stmt 1 view .LVU184
+ 777              	.L61:
+ 124:app/src/cli_task.c ****         while (*p == ' ' || *p == '\t') p++;
+ 778              		.loc 1 124 12 view .LVU185
+ 779 0044 1978     		ldrb	r1, [r3]	@ zero_extendqisi2
+ 780 0046 0029     		cmp	r1, #0
+ 781 0048 E1D1     		bne	.L69
+ 782              	.L63:
+ 134:app/src/cli_task.c ****         }
+ 135:app/src/cli_task.c ****     }
+ 136:app/src/cli_task.c ****     CLI_Execute(argc, argv, rx_buf);
+ 783              		.loc 1 136 5 view .LVU186
+ 784 004a 01A9     		add	r1, sp, #4
+ 785 004c FFF7FEFF 		bl	CLI_Execute
+ 786              	.LVL74:
+ 137:app/src/cli_task.c **** }
+ 787              		.loc 1 137 1 is_stmt 0 view .LVU187
+ 788 0050 07B0     		add	sp, sp, #28
+ 789              	.LCFI15:
+ 790              		.cfi_def_cfa_offset 4
+ 791              		@ sp needed
+ 792 0052 00BD     		pop	{pc}
+ 793              		.cfi_endproc
+ 794              	.LFE6:
+ 796              		.section	.text.CLI_Init,"ax",%progbits
+ 797              		.align	1
+ 798              		.global	CLI_Init
+ 799              		.syntax unified
+ 800              		.thumb
+ 801              		.thumb_func
+ 803              	CLI_Init:
+ 804              	.LFB7:
+ 138:app/src/cli_task.c **** 
+ARM GAS  C:\Users\user\AppData\Local\Temp\ccdVR0NF.s 			page 20
+
+
+ 139:app/src/cli_task.c **** /* 初始化 CLI 接收狀態機，清空字串緩衝區與溢位計數 */
+ 140:app/src/cli_task.c **** void CLI_Init(void) {
+ 805              		.loc 1 140 21 is_stmt 1 view -0
+ 806              		.cfi_startproc
+ 807              		@ args = 0, pretend = 0, frame = 0
+ 808              		@ frame_needed = 0, uses_anonymous_args = 0
+ 809              		@ link register save eliminated.
+ 141:app/src/cli_task.c ****     line_len = 0;
+ 810              		.loc 1 141 5 view .LVU189
+ 811              		.loc 1 141 14 is_stmt 0 view .LVU190
+ 812 0000 0023     		movs	r3, #0
+ 813 0002 034A     		ldr	r2, .L72
+ 814 0004 1360     		str	r3, [r2]
+ 142:app/src/cli_task.c ****     line_overflow = false;
+ 815              		.loc 1 142 5 is_stmt 1 view .LVU191
+ 816              		.loc 1 142 19 is_stmt 0 view .LVU192
+ 817 0006 034A     		ldr	r2, .L72+4
+ 818 0008 1370     		strb	r3, [r2]
+ 143:app/src/cli_task.c ****     cli_overflow_count = 0;
+ 819              		.loc 1 143 5 is_stmt 1 view .LVU193
+ 820              		.loc 1 143 24 is_stmt 0 view .LVU194
+ 821 000a 034A     		ldr	r2, .L72+8
+ 822 000c 1360     		str	r3, [r2]
+ 144:app/src/cli_task.c **** }
+ 823              		.loc 1 144 1 view .LVU195
+ 824 000e 7047     		bx	lr
+ 825              	.L73:
+ 826              		.align	2
+ 827              	.L72:
+ 828 0010 00000000 		.word	line_len
+ 829 0014 00000000 		.word	line_overflow
+ 830 0018 00000000 		.word	cli_overflow_count
+ 831              		.cfi_endproc
+ 832              	.LFE7:
+ 834              		.section	.text.CLI_Update,"ax",%progbits
+ 835              		.align	1
+ 836              		.global	CLI_Update
+ 837              		.syntax unified
+ 838              		.thumb
+ 839              		.thumb_func
+ 841              	CLI_Update:
+ 842              	.LVL75:
+ 843              	.LFB8:
+ 145:app/src/cli_task.c **** 
+ 146:app/src/cli_task.c **** /* 週期性從 Ring Buffer 提取字元以組合完整指令，並負責攔截單行字元數溢�
+ 147:app/src/cli_task.c **** void CLI_Update(RingBuffer_t *rx_buf) {
+ 844              		.loc 1 147 39 is_stmt 1 view -0
+ 845              		.cfi_startproc
+ 846              		@ args = 0, pretend = 0, frame = 8
+ 847              		@ frame_needed = 0, uses_anonymous_args = 0
+ 848              		.loc 1 147 39 is_stmt 0 view .LVU197
+ 849 0000 10B5     		push	{r4, lr}
+ 850              	.LCFI16:
+ 851              		.cfi_def_cfa_offset 8
+ 852              		.cfi_offset 4, -8
+ 853              		.cfi_offset 14, -4
+ 854 0002 82B0     		sub	sp, sp, #8
+ARM GAS  C:\Users\user\AppData\Local\Temp\ccdVR0NF.s 			page 21
+
+
+ 855              	.LCFI17:
+ 856              		.cfi_def_cfa_offset 16
+ 857 0004 0446     		mov	r4, r0
+ 148:app/src/cli_task.c ****     rb_item_t c;
+ 858              		.loc 1 148 5 is_stmt 1 view .LVU198
+ 149:app/src/cli_task.c ****     while (RingBuffer_Get(rx_buf, &c)) {
+ 859              		.loc 1 149 5 view .LVU199
+ 860              		.loc 1 149 11 is_stmt 0 view .LVU200
+ 861 0006 07E0     		b	.L75
+ 862              	.LVL76:
+ 863              	.L76:
+ 150:app/src/cli_task.c ****         /* 遇到 \r 或 \n 視為行尾，且只執行一次（過濾連續 \r\n\r\n） */
+ 151:app/src/cli_task.c ****         if (c == '\r' || c == '\n') {
+ 152:app/src/cli_task.c ****             if (line_overflow) {
+ 864              		.loc 1 152 13 is_stmt 1 view .LVU201
+ 865              		.loc 1 152 17 is_stmt 0 view .LVU202
+ 866 0008 1F4B     		ldr	r3, .L84
+ 867 000a 1B78     		ldrb	r3, [r3]	@ zero_extendqisi2
+ 868              		.loc 1 152 16 view .LVU203
+ 869 000c FBB1     		cbz	r3, .L78
+ 153:app/src/cli_task.c ****                 line_overflow = false; // 拋棄完畢，重置狀態
+ 870              		.loc 1 153 17 is_stmt 1 view .LVU204
+ 871              		.loc 1 153 31 is_stmt 0 view .LVU205
+ 872 000e 0023     		movs	r3, #0
+ 873 0010 1D4A     		ldr	r2, .L84
+ 874 0012 1370     		strb	r3, [r2]
+ 154:app/src/cli_task.c ****                 line_len = 0;
+ 875              		.loc 1 154 17 is_stmt 1 view .LVU206
+ 876              		.loc 1 154 26 is_stmt 0 view .LVU207
+ 877 0014 1D4A     		ldr	r2, .L84+4
+ 878 0016 1360     		str	r3, [r2]
+ 879              	.L75:
+ 149:app/src/cli_task.c ****         /* 遇到 \r 或 \n 視為行尾，且只執行一次（過濾連續 \r\n\r\n） */
+ 880              		.loc 1 149 12 is_stmt 1 view .LVU208
+ 881 0018 0DF10701 		add	r1, sp, #7
+ 882 001c 2046     		mov	r0, r4
+ 883 001e FFF7FEFF 		bl	RingBuffer_Get
+ 884              	.LVL77:
+ 149:app/src/cli_task.c ****         /* 遇到 \r 或 \n 視為行尾，且只執行一次（過濾連續 \r\n\r\n） */
+ 885              		.loc 1 149 12 is_stmt 0 discriminator 1 view .LVU209
+ 886 0022 0028     		cmp	r0, #0
+ 887 0024 2DD0     		beq	.L83
+ 151:app/src/cli_task.c ****             if (line_overflow) {
+ 888              		.loc 1 151 9 is_stmt 1 view .LVU210
+ 151:app/src/cli_task.c ****             if (line_overflow) {
+ 889              		.loc 1 151 15 is_stmt 0 view .LVU211
+ 890 0026 9DF80730 		ldrb	r3, [sp, #7]	@ zero_extendqisi2
+ 151:app/src/cli_task.c ****             if (line_overflow) {
+ 891              		.loc 1 151 12 view .LVU212
+ 892 002a 0D2B     		cmp	r3, #13
+ 893 002c ECD0     		beq	.L76
+ 151:app/src/cli_task.c ****             if (line_overflow) {
+ 894              		.loc 1 151 23 discriminator 1 view .LVU213
+ 895 002e 0A2B     		cmp	r3, #10
+ 896 0030 EAD0     		beq	.L76
+ 155:app/src/cli_task.c ****             } else if (line_len > 0) {
+ 156:app/src/cli_task.c ****                 line_buf[line_len] = '\0';
+ARM GAS  C:\Users\user\AppData\Local\Temp\ccdVR0NF.s 			page 22
+
+
+ 157:app/src/cli_task.c ****                 CLI_ParseAndExecute(line_buf, rx_buf);
+ 158:app/src/cli_task.c ****                 line_len = 0;
+ 159:app/src/cli_task.c ****             }
+ 160:app/src/cli_task.c ****         } else {
+ 161:app/src/cli_task.c ****             /* 處理正常字元 */
+ 162:app/src/cli_task.c ****             if (!line_overflow) {
+ 897              		.loc 1 162 13 is_stmt 1 view .LVU214
+ 898              		.loc 1 162 17 is_stmt 0 view .LVU215
+ 899 0032 154A     		ldr	r2, .L84
+ 900 0034 1278     		ldrb	r2, [r2]	@ zero_extendqisi2
+ 901              		.loc 1 162 16 view .LVU216
+ 902 0036 002A     		cmp	r2, #0
+ 903 0038 EED1     		bne	.L75
+ 163:app/src/cli_task.c ****                 if (line_len < MAX_LINE_LEN) {
+ 904              		.loc 1 163 17 is_stmt 1 view .LVU217
+ 905              		.loc 1 163 30 is_stmt 0 view .LVU218
+ 906 003a 144A     		ldr	r2, .L84+4
+ 907 003c 1268     		ldr	r2, [r2]
+ 908              		.loc 1 163 20 view .LVU219
+ 909 003e 3E2A     		cmp	r2, #62
+ 910 0040 14D8     		bhi	.L80
+ 164:app/src/cli_task.c ****                     line_buf[line_len++] = (char)c;
+ 911              		.loc 1 164 21 is_stmt 1 view .LVU220
+ 912              		.loc 1 164 38 is_stmt 0 view .LVU221
+ 913 0042 501C     		adds	r0, r2, #1
+ 914 0044 1149     		ldr	r1, .L84+4
+ 915 0046 0860     		str	r0, [r1]
+ 916              		.loc 1 164 42 view .LVU222
+ 917 0048 1149     		ldr	r1, .L84+8
+ 918 004a 8B54     		strb	r3, [r1, r2]
+ 919 004c E4E7     		b	.L75
+ 920              	.L78:
+ 155:app/src/cli_task.c ****             } else if (line_len > 0) {
+ 921              		.loc 1 155 20 is_stmt 1 view .LVU223
+ 155:app/src/cli_task.c ****             } else if (line_len > 0) {
+ 922              		.loc 1 155 33 is_stmt 0 view .LVU224
+ 923 004e 0F4B     		ldr	r3, .L84+4
+ 924 0050 1B68     		ldr	r3, [r3]
+ 155:app/src/cli_task.c ****             } else if (line_len > 0) {
+ 925              		.loc 1 155 23 view .LVU225
+ 926 0052 002B     		cmp	r3, #0
+ 927 0054 E0D0     		beq	.L75
+ 156:app/src/cli_task.c ****                 CLI_ParseAndExecute(line_buf, rx_buf);
+ 928              		.loc 1 156 17 is_stmt 1 view .LVU226
+ 156:app/src/cli_task.c ****                 CLI_ParseAndExecute(line_buf, rx_buf);
+ 929              		.loc 1 156 36 is_stmt 0 view .LVU227
+ 930 0056 0E48     		ldr	r0, .L84+8
+ 931 0058 4FF00002 		mov	r2, #0
+ 932 005c C254     		strb	r2, [r0, r3]
+ 157:app/src/cli_task.c ****                 line_len = 0;
+ 933              		.loc 1 157 17 is_stmt 1 view .LVU228
+ 934 005e 2146     		mov	r1, r4
+ 935 0060 FFF7FEFF 		bl	CLI_ParseAndExecute
+ 936              	.LVL78:
+ 158:app/src/cli_task.c ****             }
+ 937              		.loc 1 158 17 view .LVU229
+ 158:app/src/cli_task.c ****             }
+ARM GAS  C:\Users\user\AppData\Local\Temp\ccdVR0NF.s 			page 23
+
+
+ 938              		.loc 1 158 26 is_stmt 0 view .LVU230
+ 939 0064 094B     		ldr	r3, .L84+4
+ 940 0066 0022     		movs	r2, #0
+ 941 0068 1A60     		str	r2, [r3]
+ 942 006a D5E7     		b	.L75
+ 943              	.L80:
+ 165:app/src/cli_task.c ****                 } else {
+ 166:app/src/cli_task.c ****                     /* 一行超過 63 字元: 整行丟棄並計數 */
+ 167:app/src/cli_task.c ****                     line_overflow = true;
+ 944              		.loc 1 167 21 is_stmt 1 view .LVU231
+ 945              		.loc 1 167 35 is_stmt 0 view .LVU232
+ 946 006c 064B     		ldr	r3, .L84
+ 947 006e 0122     		movs	r2, #1
+ 948 0070 1A70     		strb	r2, [r3]
+ 168:app/src/cli_task.c ****                     cli_overflow_count++;
+ 949              		.loc 1 168 21 is_stmt 1 view .LVU233
+ 950              		.loc 1 168 39 is_stmt 0 view .LVU234
+ 951 0072 084A     		ldr	r2, .L84+12
+ 952 0074 1368     		ldr	r3, [r2]
+ 953 0076 0133     		adds	r3, r3, #1
+ 954 0078 1360     		str	r3, [r2]
+ 169:app/src/cli_task.c ****                     line_len = 0;
+ 955              		.loc 1 169 21 is_stmt 1 view .LVU235
+ 956              		.loc 1 169 30 is_stmt 0 view .LVU236
+ 957 007a 044B     		ldr	r3, .L84+4
+ 958 007c 0022     		movs	r2, #0
+ 959 007e 1A60     		str	r2, [r3]
+ 960 0080 CAE7     		b	.L75
+ 961              	.L83:
+ 170:app/src/cli_task.c ****                 }
+ 171:app/src/cli_task.c ****             }
+ 172:app/src/cli_task.c ****         }
+ 173:app/src/cli_task.c ****     }
+ 174:app/src/cli_task.c **** }...
+ 962              		.loc 1 174 1 view .LVU237
+ 963 0082 02B0     		add	sp, sp, #8
+ 964              	.LCFI18:
+ 965              		.cfi_def_cfa_offset 8
+ 966              		@ sp needed
+ 967 0084 10BD     		pop	{r4, pc}
+ 968              	.LVL79:
+ 969              	.L85:
+ 970              		.loc 1 174 1 view .LVU238
+ 971 0086 00BF     		.align	2
+ 972              	.L84:
+ 973 0088 00000000 		.word	line_overflow
+ 974 008c 00000000 		.word	line_len
+ 975 0090 00000000 		.word	line_buf
+ 976 0094 00000000 		.word	cli_overflow_count
+ 977              		.cfi_endproc
+ 978              	.LFE8:
+ 980              		.section	.bss.print_buf.0,"aw",%nobits
+ 981              		.align	2
+ 984              	print_buf.0:
+ 985 0000 00000000 		.space	128
+ 985      00000000 
+ 985      00000000 
+ARM GAS  C:\Users\user\AppData\Local\Temp\ccdVR0NF.s 			page 24
+
+
+ 985      00000000 
+ 985      00000000 
+ 986              		.global	cli_overflow_count
+ 987              		.section	.bss.cli_overflow_count,"aw",%nobits
+ 988              		.align	2
+ 991              	cli_overflow_count:
+ 992 0000 00000000 		.space	4
+ 993              		.section	.bss.line_overflow,"aw",%nobits
+ 996              	line_overflow:
+ 997 0000 00       		.space	1
+ 998              		.section	.bss.line_len,"aw",%nobits
+ 999              		.align	2
+ 1002              	line_len:
+ 1003 0000 00000000 		.space	4
+ 1004              		.section	.bss.line_buf,"aw",%nobits
+ 1005              		.align	2
+ 1008              	line_buf:
+ 1009 0000 00000000 		.space	64
+ 1009      00000000 
+ 1009      00000000 
+ 1009      00000000 
+ 1009      00000000 
+ 1010              		.text
+ 1011              	.Letext0:
+ 1012              		.file 2 "C:/arm-gnu-toolchain-15.3.rel1-mingw-w64-i686-arm-none-eabi/arm-none-eabi/include/machine
+ 1013              		.file 3 "C:/arm-gnu-toolchain-15.3.rel1-mingw-w64-i686-arm-none-eabi/lib/gcc/arm-none-eabi/15.3.1/
+ 1014              		.file 4 "C:/arm-gnu-toolchain-15.3.rel1-mingw-w64-i686-arm-none-eabi/arm-none-eabi/include/stdio.h
+ 1015              		.file 5 "C:/arm-gnu-toolchain-15.3.rel1-mingw-w64-i686-arm-none-eabi/arm-none-eabi/include/sys/_st
+ 1016              		.file 6 "app/inc/ring_buffer.h"
+ 1017              		.file 7 "app/inc/cli_task.h"
+ 1018              		.file 8 "C:/arm-gnu-toolchain-15.3.rel1-mingw-w64-i686-arm-none-eabi/arm-none-eabi/include/string.
+ 1019              		.file 9 "<built-in>"
+ARM GAS  C:\Users\user\AppData\Local\Temp\ccdVR0NF.s 			page 25
+
+
+DEFINED SYMBOLS
+                            *ABS*:00000000 cli_task.c
+C:\Users\user\AppData\Local\Temp\ccdVR0NF.s:21     .text.ParseU32:00000000 $t
+C:\Users\user\AppData\Local\Temp\ccdVR0NF.s:26     .text.ParseU32:00000000 ParseU32
+C:\Users\user\AppData\Local\Temp\ccdVR0NF.s:130    .text.ParseU32:00000054 $d
+C:\Users\user\AppData\Local\Temp\ccdVR0NF.s:135    .text.CLI_Printf:00000000 $t
+C:\Users\user\AppData\Local\Temp\ccdVR0NF.s:141    .text.CLI_Printf:00000000 CLI_Printf
+C:\Users\user\AppData\Local\Temp\ccdVR0NF.s:202    .text.CLI_Printf:00000028 $d
+C:\Users\user\AppData\Local\Temp\ccdVR0NF.s:984    .bss.print_buf.0:00000000 print_buf.0
+C:\Users\user\AppData\Local\Temp\ccdVR0NF.s:207    .rodata.CLI_Execute.str1.4:00000000 $d
+C:\Users\user\AppData\Local\Temp\ccdVR0NF.s:269    .text.CLI_Execute:00000000 $t
+C:\Users\user\AppData\Local\Temp\ccdVR0NF.s:274    .text.CLI_Execute:00000000 CLI_Execute
+C:\Users\user\AppData\Local\Temp\ccdVR0NF.s:658    .text.CLI_Execute:0000017c $d
+C:\Users\user\AppData\Local\Temp\ccdVR0NF.s:991    .bss.cli_overflow_count:00000000 cli_overflow_count
+C:\Users\user\AppData\Local\Temp\ccdVR0NF.s:684    .text.CLI_ParseAndExecute:00000000 $t
+C:\Users\user\AppData\Local\Temp\ccdVR0NF.s:689    .text.CLI_ParseAndExecute:00000000 CLI_ParseAndExecute
+C:\Users\user\AppData\Local\Temp\ccdVR0NF.s:797    .text.CLI_Init:00000000 $t
+C:\Users\user\AppData\Local\Temp\ccdVR0NF.s:803    .text.CLI_Init:00000000 CLI_Init
+C:\Users\user\AppData\Local\Temp\ccdVR0NF.s:828    .text.CLI_Init:00000010 $d
+C:\Users\user\AppData\Local\Temp\ccdVR0NF.s:1002   .bss.line_len:00000000 line_len
+C:\Users\user\AppData\Local\Temp\ccdVR0NF.s:996    .bss.line_overflow:00000000 line_overflow
+C:\Users\user\AppData\Local\Temp\ccdVR0NF.s:835    .text.CLI_Update:00000000 $t
+C:\Users\user\AppData\Local\Temp\ccdVR0NF.s:841    .text.CLI_Update:00000000 CLI_Update
+C:\Users\user\AppData\Local\Temp\ccdVR0NF.s:973    .text.CLI_Update:00000088 $d
+C:\Users\user\AppData\Local\Temp\ccdVR0NF.s:1008   .bss.line_buf:00000000 line_buf
+C:\Users\user\AppData\Local\Temp\ccdVR0NF.s:981    .bss.print_buf.0:00000000 $d
+C:\Users\user\AppData\Local\Temp\ccdVR0NF.s:988    .bss.cli_overflow_count:00000000 $d
+C:\Users\user\AppData\Local\Temp\ccdVR0NF.s:997    .bss.line_overflow:00000000 $d
+C:\Users\user\AppData\Local\Temp\ccdVR0NF.s:999    .bss.line_len:00000000 $d
+C:\Users\user\AppData\Local\Temp\ccdVR0NF.s:1005   .bss.line_buf:00000000 $d
+
+UNDEFINED SYMBOLS
+vsnprintf
+CLI_Write
+strcmp
+RingBuffer_Count
+RingBuffer_Dropped
+CLI_PortLogCount
+CLI_PortReadTempX100
+CLI_PortLogRead
+RingBuffer_Get
