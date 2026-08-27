@@ -19,6 +19,9 @@ extern bool CLI_PortReadTempX100(int32_t *out_temp);         /* 支援錯誤回�
 extern uint32_t CLI_PortLogCount(void);
 extern bool CLI_PortLogRead(uint32_t idx, CLI_LogRecord_t *rec); /* 換成強型別結構體指標 */
 
+/* 新增：宣告 main.c 裡面的讀取與存檔功能，讓 CLI 可以跨檔案呼叫 */
+extern void Action_Read_And_Save(void); 
+
 void CLI_Init(void);
 void CLI_Update(RingBuffer_t *rx_buf);
 void CLI_Printf(const char *format, ...);

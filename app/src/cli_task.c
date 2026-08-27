@@ -42,31 +42,16 @@ static bool ParseU32(const char *str, uint32_t *out_val) {
 }
 
 /* 根據解析完畢的 argc 與 argv，比對並執行對應的系統指令邏輯 */
-/* 新增 rx_buf 參數，讓 stat 指令可以取得環形緩衝區的狀態 */
 static void CLI_Execute(int argc, char *argv[], RingBuffer_t *rx_buf) {
     if (argc == 0) return;
 
     if (strcmp(argv[0], "help") == 0) {
-        CLI_Printf("Commands: help, read temp, dump [n], stat\r\n");
+        // 更新 help 說明，將 read temp 改為 read
+        CLI_Printf("Commands: help, read, dump [n], stat\r\n");
     } 
-    else if (strcmp(argv[0], "read") == 0 && argc >= 2 && strcmp(argv[1], "temp") == 0) {
-        int32_t temp;
-        
-        /* CLI_PortReadTempX100 改成 bool 回傳加出參數，以防 I2C 讀取失敗 */
-        if (CLI_PortReadTempX100(&temp)) {
-            uint32_t abs_temp;
-            
-            /* 處理負數溫度：避開 INT32_MIN 溢位 UB，先轉 unsigned 再取補數 */
-            if (temp < 0) {
-                abs_temp = 0u - (uint32_t)temp;
-            } else {
-                abs_temp = (uint32_t)temp;
-            }
-            
-            CLI_Printf("Temp: %s%u.%02u\r\n", (temp < 0) ? "-" : "", abs_temp / 100, abs_temp % 100);
-        } else {
-            CLI_Printf("Error: I2C Sensor read failed\r\n");
-        }
+    else if (strcmp(argv[0], "read") == 0) {
+        // 只要輸入 read，就直接觸發讀取溫度並寫入 Flash 的動作！
+        Action_Read_And_Save();
     } 
     else if (strcmp(argv[0], "dump") == 0) {
         uint32_t total = CLI_PortLogCount();
@@ -95,9 +80,9 @@ static void CLI_Execute(int argc, char *argv[], RingBuffer_t *rx_buf) {
             CLI_LogRecord_t rec;
             if (CLI_PortLogRead(i, &rec)) {
                 uint32_t abs_temp = (rec.temp_x100 < 0) ? (0u - (uint32_t)rec.temp_x100) : (uint32_t)rec.temp_x100;
-                CLI_Printf("[%u] Seq:%u TS:%u Temp:%s%u.%02u Flags:0x%02X\r\n",
-                           i, rec.seq, rec.timestamp,
-                           (rec.temp_x100 < 0) ? "-" : "", abs_temp / 100, abs_temp % 100, rec.flags);
+                // 簡化 dump 輸出格式，因為目前還沒實作 RTC，所以 timestamp 和 seq 先忽略，專注看溫度
+                CLI_Printf("[%u] Temp: %s%u.%02u C\r\n",
+                           i, (rec.temp_x100 < 0) ? "-" : "", abs_temp / 100, abs_temp % 100);
             } else {
                 CLI_Printf("[%u] Read error\r\n", i);
             }
