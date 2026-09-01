@@ -1,16 +1,16 @@
 ### 專案資料夾
   📂 你的專案根目錄 (My_DataLogger)
- ┣ 📂 Core            <-- (底層配置：如果是用工具生成的代碼都放這)
+ ┣ 📂 core            <-- (工具生成的代碼都放這)
  ┃  ┣ 📂 Inc        (例如 main.h, stm32f4xx_it.h)
  ┃  ┗ 📂 Src        (例如 main.c, stm32f4xx_it.c)
  ┃
- ┣ 📂 App             <-- (你的應用邏輯：面試最核心的價值放這)
+ ┣ 📂 app             <-- (應用層)
  ┃  ┣ 📂 Inc        (ring_buffer.h, cli_task.h, data_logger.h)
  ┃  ┗ 📂 Src        (ring_buffer.c, cli_task.c, data_logger.c)
  ┃
- ┣ 📂 Drivers         <-- (硬體驅動層：你自己寫的外部 IC 驅動)
- ┃  ┣ 📂 Inc        (lm75.h, w25q64.h, bme280_if.h)
- ┃  ┗ 📂 Src        (lm75.c, w25q64.c, bme280_if.c)
+ ┣ 📂 Drivers         <-- (STM32 generated code)
+ ┃  ┣ 📂 CMSIS        
+ ┃  ┗ 📂 STM32F4xx_HAL_Driver
  ┃
  ┗ 📂 Middlewares     <-- (第三方函式庫：別人的 Code)
     ┗ 📂 FreeRTOS   (FreeRTOS 的原始碼)

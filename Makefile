@@ -36,7 +36,7 @@ BUILD_DIR = build
 ######################################
 # C sources
 C_SOURCES =  \
-Core/Src/main.c \
+Lab3/lab3.c \
 Core/Src/gpio.c \
 Core/Src/usart.c \
 Core/Src/stm32f4xx_it.c \
@@ -61,8 +61,23 @@ Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_exti.c \
 Core/Src/system_stm32f4xx.c \
 Core/Src/sysmem.c \
 Core/Src/syscalls.c \
+app/Src/app_logger.c \
 app/src/cli_task.c \
-app/src/ring_buffer.c 
+app/src/ring_buffer.c \
+bsp/Src/bsp_spi.c \
+bsp/Src/bsp_i2c.c \
+bsp/Src/bsp_w25q64.c \
+bsp/Src/bsp_ssd1306.c \
+bsp/Src/bsp_lm75.c \
+FreeRTOS/src/croutine.c \
+FreeRTOS/src/event_groups.c \
+FreeRTOS/src/list.c \
+FreeRTOS/src/queue.c \
+FreeRTOS/src/stream_buffer.c \
+FreeRTOS/src/tasks.c \
+FreeRTOS/src/timers.c \
+FreeRTOS/portable/MemMang/heap_4.c \
+FreeRTOS/portable/GCC/ARM_CM4F/port.c
 
 # ASM sources
 ASM_SOURCES =  \
@@ -128,7 +143,10 @@ C_INCLUDES =  \
 -IDrivers/STM32F4xx_HAL_Driver/Inc/Legacy \
 -IDrivers/CMSIS/Device/ST/STM32F4xx/Include \
 -IDrivers/CMSIS/Include \
--Iapp/inc
+-Iapp/inc \
+-Ibsp/Inc \
+-IFreeRTOS/inc \
+-IFreeRTOS/portable/GCC/ARM_CM4F
 
 
 # compile gcc flags

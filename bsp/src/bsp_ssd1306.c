@@ -1,0 +1,195 @@
+/**
+  ******************************************************************************
+  * @file    bsp_ssd1306.c
+  * @brief   SSD1306 OLED I2C Driver Implementation
+  ******************************************************************************
+  */
+#include "bsp_ssd1306.h"
+#include "bsp_i2c.h"
+
+/* ------------------------------------------------------------------------- */
+/* 5x7 ASCII 字庫 (只擷取從空白 ' ' 到字母 'z' 的常用字元)                   */
+/* 每一個字元由 5 個 Byte 組成，代表 5 直排的像素資料                        */
+/* ------------------------------------------------------------------------- */
+static const uint8_t font5x7[][5] = {
+    {0x00, 0x00, 0x00, 0x00, 0x00}, // ' ' (空白)
+    {0x00, 0x00, 0x4F, 0x00, 0x00}, // '!'
+    {0x00, 0x07, 0x00, 0x07, 0x00}, // '"'
+    {0x14, 0x7F, 0x14, 0x7F, 0x14}, // '#'
+    {0x24, 0x2A, 0x7F, 0x2A, 0x12}, // '$'
+    {0x23, 0x13, 0x08, 0x64, 0x62}, // '%'
+    {0x36, 0x49, 0x55, 0x22, 0x50}, // '&'
+    {0x00, 0x05, 0x03, 0x00, 0x00}, // '''
+    {0x00, 0x1C, 0x22, 0x41, 0x00}, // '('
+    {0x00, 0x41, 0x22, 0x1C, 0x00}, // ')'
+    {0x14, 0x08, 0x3E, 0x08, 0x14}, // '*'
+    {0x08, 0x08, 0x3E, 0x08, 0x08}, // '+'
+    {0x00, 0x50, 0x30, 0x00, 0x00}, // ','
+    {0x08, 0x08, 0x08, 0x08, 0x08}, // '-'
+    {0x00, 0x60, 0x60, 0x00, 0x00}, // '.'
+    {0x20, 0x10, 0x08, 0x04, 0x02}, // '/'
+    {0x3E, 0x51, 0x49, 0x45, 0x3E}, // '0'
+    {0x00, 0x42, 0x7F, 0x40, 0x00}, // '1'
+    {0x42, 0x61, 0x51, 0x49, 0x46}, // '2'
+    {0x21, 0x41, 0x45, 0x4B, 0x31}, // '3'
+    {0x18, 0x14, 0x12, 0x7F, 0x10}, // '4'
+    {0x27, 0x45, 0x45, 0x45, 0x39}, // '5'
+    {0x3C, 0x4A, 0x49, 0x49, 0x30}, // '6'
+    {0x01, 0x71, 0x09, 0x05, 0x03}, // '7'
+    {0x36, 0x49, 0x49, 0x49, 0x36}, // '8'
+    {0x06, 0x49, 0x49, 0x29, 0x1E}, // '9'
+    {0x00, 0x36, 0x36, 0x00, 0x00}, // ':'
+    {0x00, 0x56, 0x36, 0x00, 0x00}, // ';'
+    {0x08, 0x14, 0x22, 0x41, 0x00}, // '<'
+    {0x14, 0x14, 0x14, 0x14, 0x14}, // '='
+    {0x00, 0x41, 0x22, 0x14, 0x08}, // '>'
+    {0x02, 0x01, 0x51, 0x09, 0x06}, // '?'
+    {0x32, 0x49, 0x79, 0x41, 0x3E}, // '@'
+    {0x7E, 0x11, 0x11, 0x11, 0x7E}, // 'A'
+    {0x7F, 0x49, 0x49, 0x49, 0x36}, // 'B'
+    {0x3E, 0x41, 0x41, 0x41, 0x22}, // 'C'
+    {0x7F, 0x41, 0x41, 0x22, 0x1C}, // 'D'
+    {0x7F, 0x49, 0x49, 0x49, 0x41}, // 'E'
+    {0x7F, 0x09, 0x09, 0x09, 0x01}, // 'F'
+    {0x3E, 0x41, 0x49, 0x49, 0x7A}, // 'G'
+    {0x7F, 0x08, 0x08, 0x08, 0x7F}, // 'H'
+    {0x00, 0x41, 0x7F, 0x41, 0x00}, // 'I'
+    {0x20, 0x40, 0x41, 0x3F, 0x01}, // 'J'
+    {0x7F, 0x08, 0x14, 0x22, 0x41}, // 'K'
+    {0x7F, 0x40, 0x40, 0x40, 0x40}, // 'L'
+    {0x7F, 0x02, 0x0C, 0x02, 0x7F}, // 'M'
+    {0x7F, 0x04, 0x08, 0x10, 0x7F}, // 'N'
+    {0x3E, 0x41, 0x41, 0x41, 0x3E}, // 'O'
+    {0x7F, 0x09, 0x09, 0x09, 0x06}, // 'P'
+    {0x3E, 0x41, 0x51, 0x21, 0x5E}, // 'Q'
+    {0x7F, 0x09, 0x19, 0x29, 0x46}, // 'R'
+    {0x46, 0x49, 0x49, 0x49, 0x31}, // 'S'
+    {0x01, 0x01, 0x7F, 0x01, 0x01}, // 'T'
+    {0x3F, 0x40, 0x40, 0x40, 0x3F}, // 'U'
+    {0x1F, 0x20, 0x40, 0x20, 0x1F}, // 'V'
+    {0x3F, 0x40, 0x38, 0x40, 0x3F}, // 'W'
+    {0x63, 0x14, 0x08, 0x14, 0x63}, // 'X'
+    {0x07, 0x08, 0x70, 0x08, 0x07}, // 'Y'
+    {0x61, 0x51, 0x49, 0x45, 0x43}, // 'Z'
+    // 若要顯示小寫，可自行在網路上找完整的 5x7 ASCII 陣列擴充
+};
+
+/**
+ * @brief  發送單一指令到 OLED
+ */
+void OLED_WriteCommand(uint8_t cmd) {
+    uint8_t buffer[2];
+    buffer[0] = 0x00; // Control Byte: 指令模式
+    buffer[1] = cmd;  // 實際指令
+    I2C1_WriteBuffer(OLED_I2C_ADDR, buffer, 2);
+}
+
+/**
+ * @brief  發送單一畫面資料到 OLED
+ */
+void OLED_WriteData(uint8_t data) {
+    uint8_t buffer[2];
+    buffer[0] = 0x40; // Control Byte: 資料模式
+    buffer[1] = data; // 像素資料
+    I2C1_WriteBuffer(OLED_I2C_ADDR, buffer, 2);
+}
+
+/**
+ * @brief  初始化 SSD1306 螢幕
+ * @note   包含開啟電荷幫浦、設定對比度、關閉全白顯示等標準流程
+ */
+void OLED_Init(void) {
+    // 等待硬體上電穩定
+    for(volatile int i=0; i<50000; i++); 
+
+    OLED_WriteCommand(0xAE); // 關閉螢幕 (Display OFF)
+    OLED_WriteCommand(0x20); // 設定記憶體尋址模式
+    OLED_WriteCommand(0x10); // 00: 水平, 01: 垂直, 10: 分頁 (Page Addressing)
+    OLED_WriteCommand(0xB0); // 設定 Page Start Address
+    OLED_WriteCommand(0xC8); // COM 輸出掃描方向 (上下反轉)
+    OLED_WriteCommand(0x00); // 設定 Low Column Address
+    OLED_WriteCommand(0x10); // 設定 High Column Address
+    OLED_WriteCommand(0x40); // 設定 Start Line Address
+    OLED_WriteCommand(0x81); // 設定對比度控制
+    OLED_WriteCommand(0xFF); // 亮度全開 (0x00~0xFF)
+    OLED_WriteCommand(0xA1); // 設定 Segment Re-map (左右反轉)
+    OLED_WriteCommand(0xA6); // 正常顯示 (非反白)
+    OLED_WriteCommand(0xA8); // 設定 Multiplex Ratio
+    OLED_WriteCommand(0x3F); // 1/64 duty
+    OLED_WriteCommand(0xA4); // 輸出 RAM 內容 (關閉全螢幕點亮測試)
+    OLED_WriteCommand(0xD3); // 設定 Display Offset
+    OLED_WriteCommand(0x00); // 無偏移
+    OLED_WriteCommand(0xD5); // 設定顯示時鐘分頻比
+    OLED_WriteCommand(0xF0); // 預設值
+    OLED_WriteCommand(0xD9); // 設定 Pre-charge Period
+    OLED_WriteCommand(0x22); 
+    OLED_WriteCommand(0xDA); // 設定 COM Pins 硬體配置
+    OLED_WriteCommand(0x12); 
+    OLED_WriteCommand(0xDB); // 設定 VCOMH Deselect Level
+    OLED_WriteCommand(0x20); 
+    OLED_WriteCommand(0x8D); // 開啟內部電荷幫浦 (Charge Pump)
+    OLED_WriteCommand(0x14); // 必須開啟才能亮
+    OLED_WriteCommand(0xAF); // 喚醒螢幕 (Display ON)
+    
+    OLED_Clear(); // 初始化完畢後清空螢幕亂碼
+}
+
+/**
+ * @brief  清除整個螢幕畫面 (將所有分頁的資料填為 0x00)
+ */
+void OLED_Clear(void) {
+    for (uint8_t page = 0; page < 8; page++) {
+        OLED_WriteCommand(0xB0 + page); // 選擇第 0~7 頁
+        OLED_WriteCommand(0x00);        // 游標回到 X 軸起點 (Low Byte)
+        OLED_WriteCommand(0x10);        // 游標回到 X 軸起點 (High Byte)
+        for (uint8_t i = 0; i < 128; i++) {
+            OLED_WriteData(0x00);       // 寫入 0x00 熄滅像素
+        }
+    }
+}
+
+/**
+ * @brief 設定 OLED 寫入游標位置
+ * @param x: X軸座標 (0 ~ 127)
+ * @param page: 分頁座標 (0 ~ 7, OLED 把 64 pixels 高度切成 8 個 page)
+ */
+void OLED_SetCursor(uint8_t x, uint8_t page) {
+    OLED_WriteCommand(0xB0 + page);             // 設定 Page 位址
+    OLED_WriteCommand(0x00 | (x & 0x0F));       // 設定欄位低 4 位元
+    OLED_WriteCommand(0x10 | ((x >> 4) & 0x0F));// 設定欄位高 4 位元
+}
+
+/**
+ * @brief 在指定位置印出單一字元
+ */
+void OLED_ShowChar(uint8_t x, uint8_t page, char ch) {
+    if (ch < ' ' || ch > 'Z') ch = ' '; // 邊界防呆 (超出字庫則顯示空白)
+    uint8_t c = ch - ' '; // 計算在陣列中的位移量
+    
+    OLED_SetCursor(x, page);
+    
+    // 把 5 個像素點 + 1 個空白間距，打包成一包 I2C 發送，效能最高
+    uint8_t buffer[7];
+    buffer[0] = 0x40; // Control Byte: 資料模式
+    for (int i = 0; i < 5; i++) {
+        buffer[i + 1] = font5x7[c][i];
+    }
+    buffer[6] = 0x00; // 字元間的空白像素
+    
+    I2C1_WriteBuffer(OLED_I2C_ADDR, buffer, 7);
+}
+
+/**
+ * @brief 在指定位置印出字串
+ */
+void OLED_ShowString(uint8_t x, uint8_t page, const char *str) {
+    while (*str != '\0') {
+        OLED_ShowChar(x, page, *str);
+        x += 6; // 每個字元寬度為 5 + 1(空白) = 6
+        if (x > 121) { // 如果超過螢幕邊界，自動換行
+            x = 0;
+            page++;
+        }
+        str++;
+    }
+}
