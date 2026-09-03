@@ -6,6 +6,36 @@
   */
 #include "bsp_i2c.h"
 
+/* SystemClock_Config_BareMetal() sets APB1/PCLK1 to 42 MHz. */
+#define I2C1_PCLK1_MHZ             42U
+#define I2C1_STANDARD_MODE_CCR     210U  /* 42 MHz / (2 * 100 kHz) */
+#define I2C1_STANDARD_MODE_TRISE   (I2C1_PCLK1_MHZ + 1U)
+
+/*
+ * Bus recovery needs a short, deterministic delay while toggling SCL.  Keep
+ * this independent of HAL and FreeRTOS so it is also usable before the
+ * scheduler starts. STM32F446's Cortex-M4 DWT cycle counter is suitable for
+ * this microsecond-scale delay.
+ */
+static void I2C1_DelayUs(uint32_t us) {
+    static bool dwt_ready = false;
+
+    if (!dwt_ready) {
+        CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+        DWT->CYCCNT = 0;
+        DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+        dwt_ready = true;
+    }
+
+    const uint32_t cycles_per_us = SystemCoreClock / 1000000U;
+    const uint32_t start = DWT->CYCCNT;
+    const uint32_t delay_cycles = cycles_per_us * us;
+
+    while ((uint32_t)(DWT->CYCCNT - start) < delay_cycles) {
+        __NOP();
+    }
+}
+
 /**
  * @brief  初始化 I2C1 硬體引擎
  * @note   PB8(SCL), PB9(SDA) 設為開汲極 (Open-Drain) 與內部上拉
@@ -25,11 +55,10 @@ void I2C1_Init_BareMetal(void) {
 
     I2C1->CR1 |= I2C_CR1_SWRST;
     I2C1->CR1 &= ~I2C_CR1_SWRST;
-    I2C1->CR2 &= ~I2C_CR2_FREQ;
-    I2C1->CR2 |= 16; 
-    I2C1->CCR &= ~I2C_CCR_CCR;
-    I2C1->CCR |= 80;
-    I2C1->TRISE = 17;
+    /* Standard-mode (100 kHz) timing for the 42 MHz APB1 peripheral clock. */
+    I2C1->CR2 = (I2C1->CR2 & ~I2C_CR2_FREQ) | I2C1_PCLK1_MHZ;
+    I2C1->CCR = I2C1_STANDARD_MODE_CCR;
+    I2C1->TRISE = I2C1_STANDARD_MODE_TRISE;
     I2C1->CR1 |= I2C_CR1_PE; 
 }
 
@@ -42,10 +71,13 @@ void I2C1_RecoverBus(void) {
     GPIOB->MODER &= ~GPIO_MODER_MODER8;
     GPIOB->MODER |= GPIO_MODER_MODER8_0;
     
-    for(int i = 0; i < 9; i++) {
-        GPIOB->ODR |= (1 << 8);  HAL_Delay(1); // 註: 這裡暫時保留 HAL_Delay，未來手刻 SysTick 後再換掉
-        GPIOB->ODR &= ~(1 << 8); HAL_Delay(1);            
+    for (int i = 0; i < 9; i++) {
+        GPIOB->BSRR = GPIO_BSRR_BS_8;
+        I2C1_DelayUs(5U);
+        GPIOB->BSRR = GPIO_BSRR_BR_8;
+        I2C1_DelayUs(5U);
     }
+
     I2C1_Init_BareMetal();
 }
 

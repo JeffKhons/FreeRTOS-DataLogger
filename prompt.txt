@@ -1,0 +1,149 @@
+請完整分析這個 STM32 嵌入式專案。
+
+目前先不要修改任何檔案，也不要產生新的程式碼。
+請先閱讀整個專案，建立對系統架構的完整理解。
+
+請依照以下順序分析：
+
+1. 專案基本架構
+- 判斷使用的 STM32 MCU / 開發板
+- 找出 STM32CubeMX / STM32CubeIDE 產生的程式碼
+- 找出 main.c
+- 找出 application、driver、middleware 等主要模組
+- 說明各個資料夾的用途
+- 說明哪些程式碼是自動產生，哪些是使用者自己撰寫
+
+2. FreeRTOS 架構
+請找出所有：
+- Task / Thread
+- Task Priority
+- Stack Size
+- Queue
+- Semaphore
+- Mutex
+- Event Group
+- Software Timer
+
+並說明：
+- 每個 Task 負責什麼
+- Task 之間如何交換資料
+- 哪些 Task 會互相等待
+- 哪些資源被多個 Task 共用
+
+3. STM32 硬體周邊
+找出專案使用的：
+- GPIO
+- UART
+- SPI
+- I2C
+- ADC
+- Timer
+- DMA
+- SDIO / SD Card
+- Interrupt
+
+說明每個 peripheral：
+- 在哪裡初始化
+- 被哪些函式使用
+- 被哪些 Task 使用
+- 是否使用 DMA
+- 是否使用 Interrupt
+- Interrupt / DMA 完成後如何通知 Task
+
+4. 程式執行流程
+請從 MCU Reset 開始追蹤：
+
+Reset
+→ startup
+→ main()
+→ HAL initialization
+→ peripheral initialization
+→ FreeRTOS initialization
+→ scheduler start
+→ 各個 Task 執行
+
+請指出實際的檔案名稱與函式名稱。
+
+5. 資料流分析
+追蹤重要資料從產生到使用的完整流程。
+
+例如：
+
+Sensor
+→ Driver
+→ Buffer
+→ Queue
+→ Processing Task
+→ Logger Task
+→ SD Card
+
+如果專案實際架構不同，請依照程式碼分析真正的資料流。
+
+6. FreeRTOS 潛在問題
+請特別檢查：
+
+- Race Condition
+- Deadlock
+- Priority Inversion
+- Stack Overflow
+- Heap 使用問題
+- Blocking Call
+- Shared Resource
+- Critical Section
+- Mutex / Semaphore 使用錯誤
+- Queue Overflow
+- Buffer Overflow
+- ISR 與 Task 同步問題
+- ISR 中使用錯誤的 FreeRTOS API
+- 多個 Task 同時存取 peripheral
+- DMA synchronization
+- Thread Safety
+- 動態記憶體配置問題
+
+7. 嵌入式系統問題
+請檢查：
+
+- 是否有不必要的 busy waiting
+- 是否有過長的 blocking delay
+- 是否有 Task 執行時間過長
+- 是否可能造成 real-time deadline miss
+- 是否有不合理的 polling
+- 是否有 memory leak
+- 是否有不安全的 pointer 使用
+- 是否可能發生 buffer 越界
+- 是否有 STM32 HAL API 使用不當
+
+8. 最後建立整體架構圖
+
+請用文字方式整理成類似：
+
+Hardware
+↓
+STM32 HAL / Driver
+↓
+Interrupt / DMA
+↓
+FreeRTOS synchronization
+↓
+Task
+↓
+Application
+
+最後請給我：
+
+A. 專案整體架構摘要
+B. Task 關係
+C. Peripheral 關係
+D. 主要資料流
+E. 你認為最值得注意的 5 個潛在問題
+
+目前不要修改任何程式碼。
+
+分析時不要只做一般性的 FreeRTOS 說明，
+請引用這個專案實際存在的：
+- 檔案名稱
+- 函式名稱
+- Task 名稱
+- 變數名稱
+
+來支持你的分析。

@@ -24,7 +24,7 @@ static void W25Q_WaitForReady(void);
  * @brief  讀取 W25Q64 晶片身分證 (JEDEC ID)
  * @note   用於開機時測試 SPI 接線是否正常，預期應印出 EF 40 17
  */
-void W25Q_Read_JEDEC_ID(void) {
+uint32_t W25Q_Read_JEDEC_ID(void) {
     uint8_t mfg_id, mem_type, capacity;
     W25Q_CS_LOW(); 
     SPI1_TxRxByte(0x9F);
@@ -36,6 +36,8 @@ void W25Q_Read_JEDEC_ID(void) {
     char str[64];
     snprintf(str, sizeof(str), "\r\n[SPI Test] W25Q64 ID: %02X %02X %02X\r\n", mfg_id, mem_type, capacity);
     CLI_Write(str);
+
+    return ((uint32_t)mfg_id << 16) | ((uint32_t)mem_type << 8) | capacity;
 }
 
 /**

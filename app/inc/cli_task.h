@@ -20,11 +20,12 @@ extern uint32_t CLI_PortLogCount(void);
 extern bool CLI_PortLogRead(uint32_t idx, CLI_LogRecord_t *rec); /* 換成強型別結構體指標 */
 
 /* 新增：宣告 main.c 裡面的讀取與存檔功能，讓 CLI 可以跨檔案呼叫 */
-extern void Action_Read_And_Save(void); 
+extern void Action_ReadTemperature(void);
 
 void CLI_Init(void);
 void CLI_Update(RingBuffer_t *rx_buf);
 void CLI_Printf(const char *format, ...);
+void vCLITask(void *pvParameters);
 
 /* 提供給 stat 查閱的內部計數器 */
 extern uint32_t cli_overflow_count;

@@ -11,7 +11,7 @@
 #include <stdbool.h>
 
 /* Public Function Prototypes ------------------------------------------------*/
-void W25Q_Read_JEDEC_ID(void);
+uint32_t W25Q_Read_JEDEC_ID(void);
 void W25Q_Unprotect(void);
 bool W25Q_SelfTest(void);
 void W25Q_SectorErase(uint32_t sector_addr);

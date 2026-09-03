@@ -1,6 +1,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdarg.h>
+#include "FreeRTOS.h"
+#include "task.h"
+#include "app_logger.h"
 #include "cli_task.h"
 
 #define MAX_LINE_LEN 63
@@ -51,7 +54,7 @@ static void CLI_Execute(int argc, char *argv[], RingBuffer_t *rx_buf) {
     } 
     else if (strcmp(argv[0], "read") == 0) {
         // 只要輸入 read，就直接觸發讀取溫度並寫入 Flash 的動作！
-        Action_Read_And_Save();
+        Action_ReadTemperature();
     } 
     else if (strcmp(argv[0], "dump") == 0) {
         uint32_t total = CLI_PortLogCount();
@@ -94,6 +97,8 @@ static void CLI_Execute(int argc, char *argv[], RingBuffer_t *rx_buf) {
         CLI_Printf("rx.dropped: %u\r\n", RingBuffer_Dropped(rx_buf));
         CLI_Printf("cli.overflow: %u\r\n", cli_overflow_count);
         CLI_Printf("log.records: %u\r\n", CLI_PortLogCount());
+        CLI_Printf("log.queue_dropped: %u\r\n", Logger_QueueDropped());
+        CLI_Printf("log.flash_errors: %u\r\n", Logger_FlashWriteErrors());
     } 
     else {
         CLI_Printf("Unknown command\r\n");
@@ -155,5 +160,21 @@ void CLI_Update(RingBuffer_t *rx_buf) {
                 }
             }
         }
+    }
+}
+
+/*
+ * The UART ISR stores received bytes in the SPSC ring buffer, then gives this
+ * task a notification.  Processing remains in task context, never in the ISR.
+ */
+void vCLITask(void *pvParameters) {
+    RingBuffer_t *rx_buf = (RingBuffer_t *)pvParameters;
+
+    /* Consume any bytes received between UART enable and scheduler start. */
+    CLI_Update(rx_buf);
+
+    for (;;) {
+        (void)ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        CLI_Update(rx_buf);
     }
 }

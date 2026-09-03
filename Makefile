@@ -36,39 +36,21 @@ BUILD_DIR = build
 ######################################
 # C sources
 C_SOURCES =  \
-Lab6/lab6.c \
-Core/Src/gpio.c \
-Core/Src/usart.c \
-Core/Src/stm32f4xx_it.c \
-Core/Src/stm32f4xx_hal_msp.c \
-Core/Src/stm32f4xx_hal_timebase_tim.c \
-Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_tim.c \
-Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_tim_ex.c \
-Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_uart.c \
-Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_rcc.c \
-Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_rcc_ex.c \
-Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_flash.c \
-Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_flash_ex.c \
-Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_flash_ramfunc.c \
-Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_gpio.c \
-Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_dma_ex.c \
-Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_dma.c \
-Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_pwr.c \
-Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_pwr_ex.c \
-Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_cortex.c \
-Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal.c \
-Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_exti.c \
-Core/Src/system_stm32f4xx.c \
-Core/Src/sysmem.c \
-Core/Src/syscalls.c \
-app/Src/app_logger.c \
+core/src/main.c \
+core/src/stm32f4xx_it.c \
+core/src/system_stm32f4xx.c \
+core/src/sysmem.c \
+core/src/syscalls.c \
+app/src/app_logger.c \
 app/src/cli_task.c \
 app/src/ring_buffer.c \
-bsp/Src/bsp_spi.c \
-bsp/Src/bsp_i2c.c \
-bsp/Src/bsp_w25q64.c \
-bsp/Src/bsp_ssd1306.c \
-bsp/Src/bsp_lm75.c \
+bsp/src/bsp_clock.c \
+bsp/src/bsp_uart_dma.c \
+bsp/src/bsp_spi.c \
+bsp/src/bsp_i2c.c \
+bsp/src/bsp_w25q64.c \
+bsp/src/bsp_ssd1306.c \
+bsp/src/bsp_lm75.c \
 FreeRTOS/src/croutine.c \
 FreeRTOS/src/event_groups.c \
 FreeRTOS/src/list.c \
@@ -129,7 +111,6 @@ AS_DEFS =
 
 # C defines
 C_DEFS =  \
--DUSE_HAL_DRIVER \
 -DSTM32F446xx
 
 
@@ -138,9 +119,7 @@ AS_INCLUDES =
 
 # C includes
 C_INCLUDES =  \
--ICore/Inc \
--IDrivers/STM32F4xx_HAL_Driver/Inc \
--IDrivers/STM32F4xx_HAL_Driver/Inc/Legacy \
+-Icore/inc \
 -IDrivers/CMSIS/Device/ST/STM32F4xx/Include \
 -IDrivers/CMSIS/Include \
 -Iapp/inc \
