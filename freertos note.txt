@@ -1,0 +1,62 @@
+========================================================================
+ 一：FreeRTOS 核心機制與 API 總整理
+========================================================================
+
+【一】OS 核心大律 (排程與中斷)
+------------------------------------------------------------------------
+1. 優先權陷阱：
+   - FreeRTOS Task 優先權：數字【越大】越高 (如 Priority 3 大於 1)。
+     API: xTaskCreate(), vTaskPrioritySet()
+   - ARM Cortex-M NVIC 硬體中斷：數字【越小】越高 (如 Priority 0 最高，15 最低)。
+
+2. Context Switch (任務切換) 的引信：
+   - 主動讓出：vTaskDelay(), vTaskDelayUntil()
+   - 阻塞等待：xSemaphoreTake(), xQueueReceive()
+   - 底層機制：API 內部會改變 TCB 的 List 狀態，隨後觸發 PendSV 硬體中斷執行真正的暫存器切換。
+
+【二】四大通訊與同步武器 (何時該用誰？)
+------------------------------------------------------------------------
+1. Task Notification (任務通知)
+   - 特性：最快、無額外 RAM 消耗、無緩衝區 (來不及收會被覆蓋)。
+   - 情境：一對一高速觸發。Sensor 讀完資料，直接把數值砸進 Logger 的 TCB 並喚醒它。
+   - 核心 API：
+     * 發送端：xTaskNotify( xTaskToNotify, ulValue, eAction );
+     * 接收端：xTaskNotifyWait( ulBitsToClearOnEntry, ulBitsToClearOnExit, &ulNotificationValue, xTicksToWait );
+     * ISR 用：xTaskNotifyFromISR( ... );
+
+2. Queue (佇列)
+   - 特性：環形緩衝區 (Ring Buffer)、Copy-by-value (複製整包結構體，安全解耦)。
+   - 情境：資料流緩衝。應付突發大流量，Sensor 高速連發，Logger 可以一筆一筆慢慢寫 Flash。
+   - 核心 API：
+     * 建立：xQueueCreate( uxQueueLength, uxItemSize );
+     * 發送：xQueueSend( xQueue, pvItemToQueue, xTicksToWait );
+     * 接收：xQueueReceive( xQueue, pvBuffer, xTicksToWait );
+     * ISR 用：xQueueSendFromISR( ... );
+
+3. Mutex (互斥鎖)
+   - 特性：具備【擁有權】(誰上鎖就必須由誰解鎖) 與【優先權繼承】(防止優先權反轉死結)。
+   - 情境：保護共用硬體 (如 I2C 總線)，防止 OLED 繪圖到一半被溫度感測器搶線打架。
+   - 核心 API：
+     * 建立：xSemaphoreCreateMutex();
+     * 上鎖：xSemaphoreTake( xMutex, xTicksToWait );
+     * 解鎖：xSemaphoreGive( xMutex );
+     (⛔ 禁止：ISR 中絕對不能使用 Mutex，只能用 Binary Semaphore！)
+
+4. Event Group (事件群組)
+   - 特性：本質是 32-bit 整數，支援 Bit-wise 的 AND (全部滿足) / OR (任一滿足) 邏輯。
+   - 情境：系統狀態機。如開機時等待 [Flash Init OK] AND [OLED Init OK] 湊齊後才開始運作。
+   - 核心 API：
+     * 建立：xEventGroupCreate();
+     * 設定：xEventGroupSetBits( xEventGroup, uxBitsToSet );
+     * 等待：xEventGroupWaitBits( xEventGroup, uxBitsToWaitFor, xClearOnExit, xWaitForAllBits, xTicksToWait );
+
+【三】ISR 中斷處理鐵律
+------------------------------------------------------------------------
+1. 快進快出：ISR 內絕對不能呼叫 Blocking API (如 vTaskDelay)，否則會引發 Kernel Panic 死機。
+2. 專屬 API：只要在 ISR 內，一律只能呼叫帶有 `FromISR` 結尾的函數。
+3. 優先權紅線：
+   呼叫 OS API 的硬體中斷，其 NVIC 優先權數字必須大於或等於 configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY (預設為 5)。
+   數字 0~4 的極高中斷，OS 管不到，但也絕對不能在裡面呼叫 FreeRTOS API！
+4. 手動觸發切換：
+   在 ISR 即將結束前，必須判斷是否有更高優先權的任務被喚醒，並手動交出 CPU：
+   portYIELD_FROM_ISR( xHigherPriorityTaskWoken );

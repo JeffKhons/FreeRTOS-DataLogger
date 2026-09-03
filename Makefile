@@ -36,7 +36,7 @@ BUILD_DIR = build
 ######################################
 # C sources
 C_SOURCES =  \
-Lab3/lab3.c \
+Lab6/lab6.c \
 Core/Src/gpio.c \
 Core/Src/usart.c \
 Core/Src/stm32f4xx_it.c \

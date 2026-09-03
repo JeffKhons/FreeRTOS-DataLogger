@@ -1,0 +1,474 @@
+ARM GAS  C:\Users\user\AppData\Local\Temp\ccr9DGd3.s 			page 1
+
+
+   1              		.cpu cortex-m4
+   2              		.arch armv7e-m
+   3              		.fpu fpv4-sp-d16
+   4              		.eabi_attribute 27, 1
+   5              		.eabi_attribute 28, 1
+   6              		.eabi_attribute 20, 1
+   7              		.eabi_attribute 21, 1
+   8              		.eabi_attribute 23, 3
+   9              		.eabi_attribute 24, 1
+  10              		.eabi_attribute 25, 1
+  11              		.eabi_attribute 26, 1
+  12              		.eabi_attribute 30, 1
+  13              		.eabi_attribute 34, 1
+  14              		.eabi_attribute 18, 4
+  15              		.file	"app_logger.c"
+  16              		.text
+  17              	.Ltext0:
+  18              		.cfi_sections	.debug_frame
+  19              		.file 1 "app/Src/app_logger.c"
+  20              		.section	.rodata.Action_Read_And_Save.str1.4,"aMS",%progbits,1
+  21              		.align	2
+  22              	.LC0:
+  23 0000 5B537973 		.ascii	"[System] Crossing 4KB Boundary, erasing next Sector"
+  23      74656D5D 
+  23      2043726F 
+  23      7373696E 
+  23      6720344B 
+  24 0033 2E2E2E0D 		.ascii	"...\015\012\000"
+  24      0A00
+  25 0039 000000   		.align	2
+  26              	.LC1:
+  27 003c 0D0A5B45 		.ascii	"\015\012[Error] Flash Write Failed! Addr:0x%04lX, W"
+  27      72726F72 
+  27      5D20466C 
+  27      61736820 
+  27      57726974 
+  28 0069 726F7465 		.ascii	"rote:%ld, Read:%ld\015\012>> \000"
+  28      3A256C64 
+  28      2C205265 
+  28      61643A25 
+  28      6C640D0A 
+  29 0081 000000   		.align	2
+  30              	.LC2:
+  31 0084 5B536176 		.ascii	"[Save OK] %ld.%02ld C saved to Addr 0x%04lX\015\012"
+  31      65204F4B 
+  31      5D20256C 
+  31      642E2530 
+  31      326C6420 
+  32 00b1 00       		.ascii	"\000"
+  33 00b2 0000     		.align	2
+  34              	.LC3:
+  35 00b4 5B457272 		.ascii	"[Error] Bad temp data, discarded.\015\012\000"
+  35      6F725D20 
+  35      42616420 
+  35      74656D70 
+  35      20646174 
+  36              		.align	2
+ARM GAS  C:\Users\user\AppData\Local\Temp\ccr9DGd3.s 			page 2
+
+
+  37              	.LC4:
+  38 00d8 5B457272 		.ascii	"[Error] LM75 Read Failed!\015\012\000"
+  38      6F725D20 
+  38      4C4D3735 
+  38      20526561 
+  38      64204661 
+  39              		.section	.text.Action_Read_And_Save,"ax",%progbits
+  40              		.align	1
+  41              		.global	Action_Read_And_Save
+  42              		.syntax unified
+  43              		.thumb
+  44              		.thumb_func
+  46              	Action_Read_And_Save:
+  47              	.LFB3:
+   1:app/Src/app_logger.c **** /**
+   2:app/Src/app_logger.c ****   ******************************************************************************
+   3:app/Src/app_logger.c ****   * @file    app_logger.c
+   4:app/Src/app_logger.c ****   * @brief   Data Logger Application Layer Implementation
+   5:app/Src/app_logger.c ****   ******************************************************************************
+   6:app/Src/app_logger.c ****   */
+   7:app/Src/app_logger.c **** #include "app_logger.h"
+   8:app/Src/app_logger.c **** #include "bsp_w25q64.h" // 引入 Flash 底層 API
+   9:app/Src/app_logger.c **** #include "bsp_lm75.h"   // 引入 溫度感測器 底層 API
+  10:app/Src/app_logger.c **** #include <stdio.h>
+  11:app/Src/app_logger.c **** 
+  12:app/Src/app_logger.c **** uint32_t flash_record_count = 0; // 全域變數：紀錄目前 Flash 已經存了幾筆溫度
+  13:app/Src/app_logger.c **** 
+  14:app/Src/app_logger.c **** /* ========================================================================= */
+  15:app/Src/app_logger.c **** /*                          應用層：讀取並寫入動作介面                           */
+  16:app/Src/app_logger.c **** /* ========================================================================= */
+  17:app/Src/app_logger.c **** 
+  18:app/Src/app_logger.c **** /**
+  19:app/Src/app_logger.c ****  * @brief  讀取 LM75 溫度，並寫入 Flash 記憶體
+  20:app/Src/app_logger.c ****  * @note   由 CLI 的 "read" 指令直接觸發，包含常識濾波器以防干擾資料存入
+  21:app/Src/app_logger.c ****  */
+  22:app/Src/app_logger.c **** void Action_Read_And_Save(void) {
+  48              		.loc 1 22 33 view -0
+  49              		.cfi_startproc
+  50              		@ args = 0, pretend = 0, frame = 136
+  51              		@ frame_needed = 0, uses_anonymous_args = 0
+  52 0000 10B5     		push	{r4, lr}
+  53              	.LCFI0:
+  54              		.cfi_def_cfa_offset 8
+  55              		.cfi_offset 4, -8
+  56              		.cfi_offset 14, -4
+  57 0002 A4B0     		sub	sp, sp, #144
+  58              	.LCFI1:
+  59              		.cfi_def_cfa_offset 152
+  23:app/Src/app_logger.c ****     int32_t temp_x100;
+  60              		.loc 1 23 5 view .LVU1
+  24:app/Src/app_logger.c ****     
+  25:app/Src/app_logger.c ****     // 💡 這裡已經替換為我們 BSP 模組中重構的正名函數 LM75_ReadTemp
+  26:app/Src/app_logger.c ****     if (LM75_ReadTemp(&temp_x100)) {
+  61              		.loc 1 26 5 view .LVU2
+  62              		.loc 1 26 9 is_stmt 0 view .LVU3
+  63 0004 23A8     		add	r0, sp, #140
+  64 0006 FFF7FEFF 		bl	LM75_ReadTemp
+ARM GAS  C:\Users\user\AppData\Local\Temp\ccr9DGd3.s 			page 3
+
+
+  65              	.LVL0:
+  66              		.loc 1 26 8 discriminator 1 view .LVU4
+  67 000a 0028     		cmp	r0, #0
+  68 000c 4BD0     		beq	.L2
+  27:app/Src/app_logger.c ****         if (temp_x100 >= 500 && temp_x100 <= 6000) {
+  69              		.loc 1 27 9 is_stmt 1 view .LVU5
+  70              		.loc 1 27 30 is_stmt 0 view .LVU6
+  71 000e 239B     		ldr	r3, [sp, #140]
+  72 0010 A3F5FA73 		sub	r3, r3, #500
+  73              		.loc 1 27 12 view .LVU7
+  74 0014 41F27C52 		movw	r2, #5500
+  75 0018 9342     		cmp	r3, r2
+  76 001a 40D8     		bhi	.L3
+  77              	.LBB2:
+  28:app/Src/app_logger.c ****             
+  29:app/Src/app_logger.c ****             if (flash_record_count % 1024 == 0) {
+  78              		.loc 1 29 13 is_stmt 1 view .LVU8
+  79              		.loc 1 29 36 is_stmt 0 view .LVU9
+  80 001c 244B     		ldr	r3, .L11
+  81 001e 1B68     		ldr	r3, [r3]
+  82 0020 C3F30902 		ubfx	r2, r3, #0, #10
+  83              		.loc 1 29 16 view .LVU10
+  84 0024 2AB9     		cbnz	r2, .L4
+  85              	.LBB3:
+  30:app/Src/app_logger.c ****                 uint32_t sector_addr = flash_record_count * 4;
+  86              		.loc 1 30 17 is_stmt 1 view .LVU11
+  87              		.loc 1 30 26 is_stmt 0 view .LVU12
+  88 0026 9A00     		lsls	r2, r3, #2
+  89 0028 1446     		mov	r4, r2
+  90              	.LVL1:
+  31:app/Src/app_logger.c ****                 if (flash_record_count > 0) {
+  91              		.loc 1 31 17 is_stmt 1 view .LVU13
+  92              		.loc 1 31 20 is_stmt 0 view .LVU14
+  93 002a E3B9     		cbnz	r3, .L10
+  94              	.LVL2:
+  95              	.L5:
+  32:app/Src/app_logger.c ****                     CLI_Write("[System] Crossing 4KB Boundary, erasing next Sector...\r\n");
+  33:app/Src/app_logger.c ****                 }
+  34:app/Src/app_logger.c ****                 W25Q_SectorErase(sector_addr);
+  96              		.loc 1 34 17 is_stmt 1 view .LVU15
+  97 002c 2046     		mov	r0, r4
+  98 002e FFF7FEFF 		bl	W25Q_SectorErase
+  99              	.LVL3:
+ 100              	.L4:
+ 101              		.loc 1 34 17 is_stmt 0 view .LVU16
+ 102              	.LBE3:
+  35:app/Src/app_logger.c ****             }
+  36:app/Src/app_logger.c **** 
+  37:app/Src/app_logger.c ****             uint32_t flash_addr = flash_record_count * 4;
+ 103              		.loc 1 37 13 is_stmt 1 view .LVU17
+ 104              		.loc 1 37 54 is_stmt 0 view .LVU18
+ 105 0032 1F4B     		ldr	r3, .L11
+ 106 0034 1B68     		ldr	r3, [r3]
+ 107              		.loc 1 37 22 view .LVU19
+ 108 0036 9B00     		lsls	r3, r3, #2
+ 109 0038 1C46     		mov	r4, r3
+ 110              	.LVL4:
+ARM GAS  C:\Users\user\AppData\Local\Temp\ccr9DGd3.s 			page 4
+
+
+  38:app/Src/app_logger.c ****             
+  39:app/Src/app_logger.c ****             W25Q_WriteInt32(flash_addr, temp_x100);
+ 111              		.loc 1 39 13 is_stmt 1 view .LVU20
+ 112 003a 2399     		ldr	r1, [sp, #140]
+ 113 003c 1846     		mov	r0, r3
+ 114 003e FFF7FEFF 		bl	W25Q_WriteInt32
+ 115              	.LVL5:
+  40:app/Src/app_logger.c ****             
+  41:app/Src/app_logger.c ****             int32_t verify_data = W25Q_ReadInt32(flash_addr);
+ 116              		.loc 1 41 13 view .LVU21
+ 117              		.loc 1 41 35 is_stmt 0 view .LVU22
+ 118 0042 2046     		mov	r0, r4
+ 119 0044 FFF7FEFF 		bl	W25Q_ReadInt32
+ 120              	.LVL6:
+  42:app/Src/app_logger.c ****             if (verify_data != temp_x100) {
+ 121              		.loc 1 42 13 is_stmt 1 view .LVU23
+ 122              		.loc 1 42 29 is_stmt 0 view .LVU24
+ 123 0048 239A     		ldr	r2, [sp, #140]
+ 124              		.loc 1 42 16 view .LVU25
+ 125 004a 8242     		cmp	r2, r0
+ 126 004c 0FD0     		beq	.L6
+ 127              	.LBB4:
+  43:app/Src/app_logger.c ****                 char err_str[128];
+ 128              		.loc 1 43 17 is_stmt 1 view .LVU26
+  44:app/Src/app_logger.c ****                 snprintf(err_str, sizeof(err_str), "\r\n[Error] Flash Write Failed! Addr:0x%04lX, W
+ 129              		.loc 1 44 17 view .LVU27
+ 130 004e 0190     		str	r0, [sp, #4]
+ 131 0050 0092     		str	r2, [sp]
+ 132 0052 2346     		mov	r3, r4
+ 133 0054 174A     		ldr	r2, .L11+4
+ 134 0056 8021     		movs	r1, #128
+ 135 0058 03A8     		add	r0, sp, #12
+ 136              	.LVL7:
+ 137              		.loc 1 44 17 is_stmt 0 view .LVU28
+ 138 005a FFF7FEFF 		bl	snprintf
+ 139              	.LVL8:
+  45:app/Src/app_logger.c ****                 CLI_Write(err_str);
+ 140              		.loc 1 45 17 is_stmt 1 view .LVU29
+ 141 005e 03A8     		add	r0, sp, #12
+ 142 0060 FFF7FEFF 		bl	CLI_Write
+ 143              	.LVL9:
+  46:app/Src/app_logger.c ****                 return;
+ 144              		.loc 1 46 17 view .LVU30
+ 145 0064 22E0     		b	.L1
+ 146              	.LVL10:
+ 147              	.L10:
+ 148              		.loc 1 46 17 is_stmt 0 view .LVU31
+ 149              	.LBE4:
+ 150              	.LBB5:
+  32:app/Src/app_logger.c ****                 }
+ 151              		.loc 1 32 21 is_stmt 1 view .LVU32
+ 152 0066 1448     		ldr	r0, .L11+8
+ 153 0068 FFF7FEFF 		bl	CLI_Write
+ 154              	.LVL11:
+  32:app/Src/app_logger.c ****                 }
+ 155              		.loc 1 32 21 is_stmt 0 view .LVU33
+ 156 006c DEE7     		b	.L5
+ARM GAS  C:\Users\user\AppData\Local\Temp\ccr9DGd3.s 			page 5
+
+
+ 157              	.LVL12:
+ 158              	.L6:
+  32:app/Src/app_logger.c ****                 }
+ 159              		.loc 1 32 21 view .LVU34
+ 160              	.LBE5:
+  47:app/Src/app_logger.c ****             }
+  48:app/Src/app_logger.c ****             
+  49:app/Src/app_logger.c ****             flash_record_count++;
+ 161              		.loc 1 49 13 is_stmt 1 view .LVU35
+ 162              		.loc 1 49 31 is_stmt 0 view .LVU36
+ 163 006e 1049     		ldr	r1, .L11
+ 164 0070 0B68     		ldr	r3, [r1]
+ 165 0072 0133     		adds	r3, r3, #1
+ 166 0074 0B60     		str	r3, [r1]
+  50:app/Src/app_logger.c ****             
+  51:app/Src/app_logger.c ****             char log_str[64];
+ 167              		.loc 1 51 13 is_stmt 1 view .LVU37
+  52:app/Src/app_logger.c ****             snprintf(log_str, sizeof(log_str), "[Save OK] %ld.%02ld C saved to Addr 0x%04lX\r\n", 
+ 168              		.loc 1 52 13 view .LVU38
+ 169 0076 1149     		ldr	r1, .L11+12
+ 170 0078 81FB0231 		smull	r3, r1, r1, r2
+ 171 007c D317     		asrs	r3, r2, #31
+ 172 007e C3EB6113 		rsb	r3, r3, r1, asr #5
+ 173 0082 0194     		str	r4, [sp, #4]
+ 174 0084 6421     		movs	r1, #100
+ 175 0086 01FB1322 		mls	r2, r1, r3, r2
+ 176 008a 0092     		str	r2, [sp]
+ 177 008c 0C4A     		ldr	r2, .L11+16
+ 178 008e 4021     		movs	r1, #64
+ 179 0090 03A8     		add	r0, sp, #12
+ 180              	.LVL13:
+ 181              		.loc 1 52 13 is_stmt 0 view .LVU39
+ 182 0092 FFF7FEFF 		bl	snprintf
+ 183              	.LVL14:
+  53:app/Src/app_logger.c ****                      temp_x100 / 100, temp_x100 % 100, flash_addr);
+  54:app/Src/app_logger.c ****             CLI_Write(log_str);
+ 184              		.loc 1 54 13 is_stmt 1 view .LVU40
+ 185 0096 03A8     		add	r0, sp, #12
+ 186 0098 FFF7FEFF 		bl	CLI_Write
+ 187              	.LVL15:
+ 188              	.LBE2:
+ 189 009c 06E0     		b	.L1
+ 190              	.LVL16:
+ 191              	.L3:
+  55:app/Src/app_logger.c ****         } else {
+  56:app/Src/app_logger.c ****              CLI_Write("[Error] Bad temp data, discarded.\r\n");
+ 192              		.loc 1 56 14 view .LVU41
+ 193 009e 0948     		ldr	r0, .L11+20
+ 194 00a0 FFF7FEFF 		bl	CLI_Write
+ 195              	.LVL17:
+ 196 00a4 02E0     		b	.L1
+ 197              	.L2:
+  57:app/Src/app_logger.c ****         }
+  58:app/Src/app_logger.c ****     } else {
+  59:app/Src/app_logger.c ****         CLI_Write("[Error] LM75 Read Failed!\r\n");
+ 198              		.loc 1 59 9 view .LVU42
+ 199 00a6 0848     		ldr	r0, .L11+24
+ARM GAS  C:\Users\user\AppData\Local\Temp\ccr9DGd3.s 			page 6
+
+
+ 200 00a8 FFF7FEFF 		bl	CLI_Write
+ 201              	.LVL18:
+ 202              	.L1:
+  60:app/Src/app_logger.c ****     }
+  61:app/Src/app_logger.c **** }
+ 203              		.loc 1 61 1 is_stmt 0 view .LVU43
+ 204 00ac 24B0     		add	sp, sp, #144
+ 205              	.LCFI2:
+ 206              		.cfi_def_cfa_offset 8
+ 207              		@ sp needed
+ 208 00ae 10BD     		pop	{r4, pc}
+ 209              	.L12:
+ 210              		.align	2
+ 211              	.L11:
+ 212 00b0 00000000 		.word	flash_record_count
+ 213 00b4 3C000000 		.word	.LC1
+ 214 00b8 00000000 		.word	.LC0
+ 215 00bc 1F85EB51 		.word	1374389535
+ 216 00c0 84000000 		.word	.LC2
+ 217 00c4 B4000000 		.word	.LC3
+ 218 00c8 D8000000 		.word	.LC4
+ 219              		.cfi_endproc
+ 220              	.LFE3:
+ 222              		.section	.text.CLI_PortLogCount,"ax",%progbits
+ 223              		.align	1
+ 224              		.global	CLI_PortLogCount
+ 225              		.syntax unified
+ 226              		.thumb
+ 227              		.thumb_func
+ 229              	CLI_PortLogCount:
+ 230              	.LFB4:
+  62:app/Src/app_logger.c **** 
+  63:app/Src/app_logger.c **** /**
+  64:app/Src/app_logger.c ****  * @brief  取得 Flash 中已存儲的資料筆數 (提供給 CLI stat/dump 調用)
+  65:app/Src/app_logger.c ****  */
+  66:app/Src/app_logger.c **** uint32_t CLI_PortLogCount(void) { 
+ 231              		.loc 1 66 33 is_stmt 1 view -0
+ 232              		.cfi_startproc
+ 233              		@ args = 0, pretend = 0, frame = 0
+ 234              		@ frame_needed = 0, uses_anonymous_args = 0
+ 235              		@ link register save eliminated.
+  67:app/Src/app_logger.c ****     return flash_record_count;
+ 236              		.loc 1 67 5 view .LVU45
+  68:app/Src/app_logger.c **** }
+ 237              		.loc 1 68 1 is_stmt 0 view .LVU46
+ 238 0000 014B     		ldr	r3, .L14
+ 239 0002 1868     		ldr	r0, [r3]
+ 240 0004 7047     		bx	lr
+ 241              	.L15:
+ 242 0006 00BF     		.align	2
+ 243              	.L14:
+ 244 0008 00000000 		.word	flash_record_count
+ 245              		.cfi_endproc
+ 246              	.LFE4:
+ 248              		.section	.text.CLI_PortLogRead,"ax",%progbits
+ 249              		.align	1
+ 250              		.global	CLI_PortLogRead
+ARM GAS  C:\Users\user\AppData\Local\Temp\ccr9DGd3.s 			page 7
+
+
+ 251              		.syntax unified
+ 252              		.thumb
+ 253              		.thumb_func
+ 255              	CLI_PortLogRead:
+ 256              	.LVL19:
+ 257              	.LFB5:
+  69:app/Src/app_logger.c **** 
+  70:app/Src/app_logger.c **** /**
+  71:app/Src/app_logger.c ****  * @brief  根據索引位置 (0, 1, 2...) 從 Flash 讀出該筆資料 (提供給 CLI dump 調用)
+  72:app/Src/app_logger.c ****  */
+  73:app/Src/app_logger.c **** bool CLI_PortLogRead(uint32_t idx, CLI_LogRecord_t *rec) { 
+ 258              		.loc 1 73 58 is_stmt 1 view -0
+ 259              		.cfi_startproc
+ 260              		@ args = 0, pretend = 0, frame = 0
+ 261              		@ frame_needed = 0, uses_anonymous_args = 0
+  74:app/Src/app_logger.c ****     if (idx >= flash_record_count) return false;
+ 262              		.loc 1 74 5 view .LVU48
+ 263              		.loc 1 74 13 is_stmt 0 view .LVU49
+ 264 0000 064B     		ldr	r3, .L24
+ 265 0002 1B68     		ldr	r3, [r3]
+ 266              		.loc 1 74 8 view .LVU50
+ 267 0004 8342     		cmp	r3, r0
+ 268 0006 01D8     		bhi	.L23
+ 269              		.loc 1 74 43 discriminator 1 view .LVU51
+ 270 0008 0020     		movs	r0, #0
+ 271              	.LVL20:
+  75:app/Src/app_logger.c ****     rec->temp_x100 = W25Q_ReadInt32(idx * 4);
+  76:app/Src/app_logger.c ****     return true;
+  77:app/Src/app_logger.c **** }...
+ 272              		.loc 1 77 1 view .LVU52
+ 273 000a 7047     		bx	lr
+ 274              	.LVL21:
+ 275              	.L23:
+  73:app/Src/app_logger.c **** bool CLI_PortLogRead(uint32_t idx, CLI_LogRecord_t *rec) { 
+ 276              		.loc 1 73 58 view .LVU53
+ 277 000c 10B5     		push	{r4, lr}
+ 278              	.LCFI3:
+ 279              		.cfi_def_cfa_offset 8
+ 280              		.cfi_offset 4, -8
+ 281              		.cfi_offset 14, -4
+ 282 000e 0C46     		mov	r4, r1
+  75:app/Src/app_logger.c ****     rec->temp_x100 = W25Q_ReadInt32(idx * 4);
+ 283              		.loc 1 75 5 is_stmt 1 view .LVU54
+  75:app/Src/app_logger.c ****     rec->temp_x100 = W25Q_ReadInt32(idx * 4);
+ 284              		.loc 1 75 22 is_stmt 0 view .LVU55
+ 285 0010 8000     		lsls	r0, r0, #2
+ 286              	.LVL22:
+  75:app/Src/app_logger.c ****     rec->temp_x100 = W25Q_ReadInt32(idx * 4);
+ 287              		.loc 1 75 22 view .LVU56
+ 288 0012 FFF7FEFF 		bl	W25Q_ReadInt32
+ 289              	.LVL23:
+  75:app/Src/app_logger.c ****     rec->temp_x100 = W25Q_ReadInt32(idx * 4);
+ 290              		.loc 1 75 20 discriminator 1 view .LVU57
+ 291 0016 A060     		str	r0, [r4, #8]
+  76:app/Src/app_logger.c ****     return true;
+ 292              		.loc 1 76 5 is_stmt 1 view .LVU58
+  76:app/Src/app_logger.c ****     return true;
+ARM GAS  C:\Users\user\AppData\Local\Temp\ccr9DGd3.s 			page 8
+
+
+ 293              		.loc 1 76 12 is_stmt 0 view .LVU59
+ 294 0018 0120     		movs	r0, #1
+ 295              		.loc 1 77 1 view .LVU60
+ 296 001a 10BD     		pop	{r4, pc}
+ 297              	.LVL24:
+ 298              	.L25:
+ 299              		.loc 1 77 1 view .LVU61
+ 300              		.align	2
+ 301              	.L24:
+ 302 001c 00000000 		.word	flash_record_count
+ 303              		.cfi_endproc
+ 304              	.LFE5:
+ 306              		.global	flash_record_count
+ 307              		.section	.bss.flash_record_count,"aw",%nobits
+ 308              		.align	2
+ 311              	flash_record_count:
+ 312 0000 00000000 		.space	4
+ 313              		.text
+ 314              	.Letext0:
+ 315              		.file 2 "C:/arm-gnu-toolchain-15.3.rel1-mingw-w64-i686-arm-none-eabi/arm-none-eabi/include/machine
+ 316              		.file 3 "C:/arm-gnu-toolchain-15.3.rel1-mingw-w64-i686-arm-none-eabi/arm-none-eabi/include/sys/_st
+ 317              		.file 4 "app/inc/cli_task.h"
+ 318              		.file 5 "C:/arm-gnu-toolchain-15.3.rel1-mingw-w64-i686-arm-none-eabi/arm-none-eabi/include/stdio.h
+ 319              		.file 6 "bsp/Inc/bsp_w25q64.h"
+ 320              		.file 7 "bsp/Inc/bsp_lm75.h"
+ 321              		.file 8 "app/inc/app_logger.h"
+ARM GAS  C:\Users\user\AppData\Local\Temp\ccr9DGd3.s 			page 9
+
+
+DEFINED SYMBOLS
+                            *ABS*:00000000 app_logger.c
+C:\Users\user\AppData\Local\Temp\ccr9DGd3.s:21     .rodata.Action_Read_And_Save.str1.4:00000000 $d
+C:\Users\user\AppData\Local\Temp\ccr9DGd3.s:40     .text.Action_Read_And_Save:00000000 $t
+C:\Users\user\AppData\Local\Temp\ccr9DGd3.s:46     .text.Action_Read_And_Save:00000000 Action_Read_And_Save
+C:\Users\user\AppData\Local\Temp\ccr9DGd3.s:212    .text.Action_Read_And_Save:000000b0 $d
+C:\Users\user\AppData\Local\Temp\ccr9DGd3.s:311    .bss.flash_record_count:00000000 flash_record_count
+C:\Users\user\AppData\Local\Temp\ccr9DGd3.s:223    .text.CLI_PortLogCount:00000000 $t
+C:\Users\user\AppData\Local\Temp\ccr9DGd3.s:229    .text.CLI_PortLogCount:00000000 CLI_PortLogCount
+C:\Users\user\AppData\Local\Temp\ccr9DGd3.s:244    .text.CLI_PortLogCount:00000008 $d
+C:\Users\user\AppData\Local\Temp\ccr9DGd3.s:249    .text.CLI_PortLogRead:00000000 $t
+C:\Users\user\AppData\Local\Temp\ccr9DGd3.s:255    .text.CLI_PortLogRead:00000000 CLI_PortLogRead
+C:\Users\user\AppData\Local\Temp\ccr9DGd3.s:302    .text.CLI_PortLogRead:0000001c $d
+C:\Users\user\AppData\Local\Temp\ccr9DGd3.s:308    .bss.flash_record_count:00000000 $d
+
+UNDEFINED SYMBOLS
+LM75_ReadTemp
+W25Q_SectorErase
+W25Q_WriteInt32
+W25Q_ReadInt32
+snprintf
+CLI_Write

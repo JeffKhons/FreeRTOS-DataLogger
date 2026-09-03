@@ -1,0 +1,29 @@
+freertos Lab
+
+Lab 0 : 確認環境 & 設置
+
+把 freertos github 抓下來配置 config.h，讓之後 lab 可以在 freertos 上跑，建立兩個 task 用 vtaskDelay 確定 tick, scheduler, context switch 運作機制，檢察功能與複習 OS。
+
+Lab 1 : Priority & Starvation
+
+Freertos 排程有別於 Linux 的 CFS，他不會像 Linux 執行優先序低且很久未被執行，將提高優先序使其不會 starvation，這裡目標是設計 3 個 task 去讓低 priority 被卡住，理解 starvation 且用 vtaskDelay 或是其他方式解解看。
+
+Lab 2 : Quene Producer/ Consumer
+
+觀察 quene.c 且用 xQueneSend timeout 與 blocked state
+
+Lab 3 : Priority inversion
+
+OS 裡面有提到，當低優先序被中間優先序搶斷時，導致高優先序沒有被執行到，這個 Lab 目的就是要玩這部分，設計三個 task 使 priority inversion 發生且用 freertos 的 Priority inhertance 去救它。
+
+Lab4 : ISR 中斷服務程式
+
+這是 OS 的骨幹，ISR 往往代表如何中止 task 先去執行中斷的程式，可以呼叫 xSemphoreGiveFromISR 去實作看看，中斷的時間很短如果使用 mutex lock 會被鎖住導致 kernal panic。所以這個可課題非常重要，要好好設想會有各式各樣的中斷。
+
+Lab5 : software timer
+
+real time os 有兩種意義，一個是軟即時另一個是硬即時，我希望可以練習 timer.c 提供的 api 去練習透過 timer 去做點事情。
+
+Lab6 : Task Notification
+
+希望可以用 task notification 去重寫 Lab2, 3
