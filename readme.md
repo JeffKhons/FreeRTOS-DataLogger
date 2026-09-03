@@ -49,6 +49,41 @@ dump [n]          Flash 功能停用時會回報 no record
 
 目前 W25Q64 模組排針接觸不穩，且錯誤讀值曾造成 boot scan 將 Flash 誤判為已有大量記錄。因此 active firmware 不初始化 SPI1、不讀取 JEDEC ID、不掃描 Flash，也不會建立 Storage Task。日後若硬體修復，再以新的記錄格式重新整合。
 
+## 學習紀錄：Week 1～4
+
+以下保留原本的學習規劃與練習重點；狀態標註僅用來反映目前專案進度，不取代原本的內容。
+
+### Week 1：C 語言、記憶體與非同步 UART 基礎（已完成）
+
+- 理解嵌入式 C 的 memory alignment、`volatile` 與 ISR / Task 共用資料的可見性。
+- 實作 Lock-free SPSC Ring Buffer：ISR 專責更新 `head`，consumer 專責更新 `tail`，保留一格區分 full / empty，並使用 power-of-two mask 加速索引。
+- 實作 CLI parser：固定長度 line buffer、`strtok_r` 等 thread-safe parsing 思路、`strcmp` 指令比對，以及 non-blocking 資料接收觀念。
+- 理解 HAL timebase 與 FreeRTOS SysTick 的關係；本專案最終採手刻 driver，不依賴 HAL 周邊層。
+
+### Week 2：Bare-metal 周邊 Driver（I2C 已驗證；SPI 保留實驗紀錄）
+
+- I2C1 / LM75 / SSD1306：PB8/PB9 開汲極設定、pull-up、I2C timing、9-clock bus recovery 與 OLED 顯示。
+- LM75 address scan：因 A0-A2 硬體位址無法固定，掃描 0x48～0x4F 找出會 ACK 的 slave。
+- SPI / W25Q64：練習 JEDEC ID、Write Enable、Sector Erase、Page Program、WIP polling 與 read-back verify。
+- UART DMA：USART2 DMA RX、IDLE line interrupt、將 DMA buffer 資料推入 SPSC ring buffer。
+- ESP8266 的 AT command / UART 通訊基礎保留至下一階段實作。
+
+### Week 3：FreeRTOS 與 IPC（進行中）
+
+- 建立 `CLI_Task`，由 UART ISR 的 Task Notification 喚醒，取代 `main()` busy polling。
+- 理解 Cortex-M NVIC priority 與 FreeRTOS `FromISR` API 的限制；USART2 IRQ 使用可呼叫 FreeRTOS API 的 priority。
+- Mutex：已建立 `xI2CMutex`，下一步由 Sensor Task 與 Display Task 實際共用。
+- Queue：下一步以 Sensor → Display / ESP8266 的資料流實作最新值 queue。
+- Event Group：下一步用於溫度警報、感測器故障與 Wi-Fi 狀態。
+- Software Timer：下一步用於 PA5 LED 告警閃爍。
+
+### Week 4：低功耗、可靠度與量測驗證（規劃中）
+
+- Tickless Idle：確認 Task 都能正確 block 後，再評估是否啟用。
+- Watchdog：加入 IWDG，定義各重要 Task 的健康檢查策略。
+- 使用邏輯分析儀 / PulseView 驗證 UART DMA、I2C mutex 行為、ESP8266 UART 與 context switch 的時序。
+- 量測 Queue 使用率、stack high-water mark、memory 使用量與 deadline miss 風險。
+
 ## 下一階段架構
 
 ```text
