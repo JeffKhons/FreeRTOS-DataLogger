@@ -2,7 +2,7 @@
 #define FREERTOS_CONFIG_H
 
 /* 引入 STM32 HAL 庫，為了取得 SystemCoreClock 這個全域變數 */
-#include "stm32f4xx_hal.h"
+#include "stm32f4xx.h"
 extern uint32_t SystemCoreClock;
 
 /* ========================================================================= */

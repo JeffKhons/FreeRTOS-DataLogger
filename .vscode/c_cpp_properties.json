@@ -3,8 +3,7 @@
         {
             "name": "Win32",
             "includePath": [
-                "${workspaceFolder}/**",
-                "${workspaceFolder}/app/inc"
+                "${workspaceFolder}/**"
             ],
             "defines": [
                 "_DEBUG",
@@ -20,16 +19,18 @@
             "name": "STM32",
             "includePath": [
                 "${workspaceFolder}/**",
-                "${workspaceFolder}/Core/Inc",
-                "${workspaceFolder}/Drivers/STM32F4xx_HAL_Driver/Inc",
+                "${workspaceFolder}/app/inc",
+                "${workspaceFolder}/bsp/inc",
+                "${workspaceFolder}/core/inc",
+                "${workspaceFolder}/FreeRTOS/inc",
+                "${workspaceFolder}/FreeRTOS/portable/GCC/ARM_CM4F",
                 "${workspaceFolder}/Drivers/CMSIS/Device/ST/STM32F4xx/Include",
                 "${workspaceFolder}/Drivers/CMSIS/Include"
             ],
             "defines": [
-                "USE_HAL_DRIVER",
                 "STM32F446xx"
             ],
-            "compilerPath": "C:\\ST\\STM32CubeIDE_1.13.0\\STM32CubeIDE\\plugins\\com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.11.3.rel1.win32_1.1.100.202309141235\\tools\\bin\\arm-none-eabi-gcc.exe",
+            "compilerPath": "arm-none-eabi-gcc",
             "cStandard": "c11",
             "cppStandard": "c++14",
             "intelliSenseMode": "gcc-arm"

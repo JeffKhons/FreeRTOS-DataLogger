@@ -10,7 +10,9 @@
 #include "usart.h"
 #include "gpio.h"
 
-/* 引入我們手刻的 BSP 與 App 層 ------------------------------------------------*/
+/* 手刻的 BSP 與 App 層 ------------------------------------------------*/
+#include "bsp_clock.h"    
+#include "bsp_uart_dma.h"
 #include "app_logger.h"
 #include "bsp_spi.h"
 #include "bsp_i2c.h"
@@ -19,20 +21,27 @@
 #include "bsp_ssd1306.h"
 #include "cli_task.h"
 #include "ring_buffer.h"
+#include "FreeRTOS.h"
+#include "task.h"
 #include <stdio.h>
 #include <string.h>
 
 RingBuffer_t uart_rx_buffer;
 uint8_t rx_data;
+TaskHandle_t xCLITaskHandle = NULL; // 給 UART ISR 發送 Task Notification 使用
 
 void SystemClock_Config(void);
 
 int main(void)
 {
-  HAL_Init();
-  SystemClock_Config();
-  MX_GPIO_Init();
-  MX_USART2_UART_Init();
+  // HAL_Init(); // 已被純 Bare-metal 取代
+  // SystemClock_Config(); // 已被純 Bare-metal 取代
+  // MX_GPIO_Init(); // 已被純 Bare-metal 取代
+  // MX_USART2_UART_Init(); // 已被純 Bare-metal 取代
+
+  /* 1. 純暫存器時鐘與通訊初始化 */
+  SystemClock_Config_BareMetal(); 
+  UART2_DMA_Init_BareMetal();     
 
   /* 2. bsp 初始化 */
   I2C1_Init_BareMetal();
@@ -88,7 +97,11 @@ int main(void)
   */
   
   /* 7. 啟動非同步中斷並進入主迴圈 */
-  HAL_UART_Receive_IT(&huart2, &rx_data, 1);
+  // HAL_UART_Receive_IT(&huart2, &rx_data, 1); // 交給 DMA 處理，這裡註解掉避免卡死
+
+  // TODO: 之後在此建立任務並啟動 Scheduler
+  // xTaskCreate(vCLITask, "CLI", 256, NULL, 1, &xCLITaskHandle);
+  // vTaskStartScheduler();
 
   while (1)
   {
@@ -100,33 +113,12 @@ int main(void)
 /*                       系統時鐘與底層回呼函數區塊                            */
 /* ========================================================================= */
 
-void SystemClock_Config(void)
-{
-  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
-  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
-  __HAL_RCC_PWR_CLK_ENABLE();
-  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE3);
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
-  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
-  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
-  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
-  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK) { Error_Handler(); }
-  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK|RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
-  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
-  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK) { Error_Handler(); }
-}
-
 void CLI_Write(const char *str) {
-    HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
-}
-
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
-    if (huart->Instance == USART2) {
-        RingBuffer_Put(&uart_rx_buffer, rx_data);
-        HAL_UART_Receive_IT(&huart2, &rx_data, 1); 
+    // 配合 Bare-metal 把原本的 HAL_UART_Transmit 拔除，改為暫存器直接發送
+    // HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
+    for (int i = 0; i < strlen(str); i++) {
+        while (!(USART2->SR & USART_SR_TXE));
+        USART2->DR = str[i];
     }
 }
 

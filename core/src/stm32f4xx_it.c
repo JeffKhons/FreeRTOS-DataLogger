@@ -1,232 +1,77 @@
-/* USER CODE BEGIN Header */
 /**
   ******************************************************************************
   * @file    stm32f4xx_it.c
-  * @brief   Interrupt Service Routines.
-  ******************************************************************************
-  * @attention
-  *
-  * Copyright (c) 2026 STMicroelectronics.
-  * All rights reserved.
-  *
-  * This software is licensed under terms that can be found in the LICENSE file
-  * in the root directory of this software component.
-  * If no LICENSE file comes with this software, it is provided AS-IS.
-  *
+  * @brief   純 Bare-metal 中斷服務常式 (ISR) 集中管理
   ******************************************************************************
   */
-/* USER CODE END Header */
 
-/* Includes ------------------------------------------------------------------*/
-#include "main.h"
-#include "stm32f4xx_it.h"
-/* Private includes ----------------------------------------------------------*/
-/* USER CODE BEGIN Includes */
-/* USER CODE END Includes */
+#include "stm32f4xx.h"
+#include "FreeRTOS.h"
+#include "task.h"
+#include "ring_buffer.h"
 
-/* Private typedef -----------------------------------------------------------*/
-/* USER CODE BEGIN TD */
+/* ========================================================================= */
+/* 外部變數宣告區 (Extern Variables)                                         */
+/* ========================================================================= */
+extern uint8_t dma_rx_buffer[];     // 來自 bsp_uart_dma.c (DMA 接收緩衝)
+extern RingBuffer_t uart_rx_buffer; // 來自 main.c (軟體環形緩衝)
+extern TaskHandle_t xCLITaskHandle; // 來自 main.c (CLI 任務句柄)
 
-/* USER CODE END TD */
 
-/* Private define ------------------------------------------------------------*/
-/* USER CODE BEGIN PD */
+/* ========================================================================= */
+/* 核心系統異常處理 (Cortex-M4 System Exceptions)                            */
+/* ========================================================================= */
+void NMI_Handler(void)        { while (1) {} }
+void HardFault_Handler(void)  { while (1) {} }
+void MemManage_Handler(void)  { while (1) {} }
+void BusFault_Handler(void)   { while (1) {} }
+void UsageFault_Handler(void) { while (1) {} }
+void DebugMon_Handler(void)   {}
 
-/* USER CODE END PD */
+// 注意：SVC_Handler, PendSV_Handler, SysTick_Handler 
+// 已經在 FreeRTOSConfig.h 中透過巨集映射給 FreeRTOS 接管，此處不可重複定義！
 
-/* Private macro -------------------------------------------------------------*/
-/* USER CODE BEGIN PM */
 
-/* USER CODE END PM */
-
-/* Private variables ---------------------------------------------------------*/
-/* USER CODE BEGIN PV */
-
-/* USER CODE END PV */
-
-/* Private function prototypes -----------------------------------------------*/
-/* USER CODE BEGIN PFP */
-
-/* USER CODE END PFP */
-
-/* Private user code ---------------------------------------------------------*/
-/* USER CODE BEGIN 0 */
-
-/* USER CODE END 0 */
-
-/* External variables --------------------------------------------------------*/
-extern UART_HandleTypeDef huart2;
-extern TIM_HandleTypeDef htim6;
-
-/* USER CODE BEGIN EV */
-
-/* USER CODE END EV */
-
-/******************************************************************************/
-/*           Cortex-M4 Processor Interruption and Exception Handlers          */
-/******************************************************************************/
-/**
-  * @brief This function handles Non maskable interrupt.
-  */
-void NMI_Handler(void)
-{
-  /* USER CODE BEGIN NonMaskableInt_IRQn 0 */
-
-  /* USER CODE END NonMaskableInt_IRQn 0 */
-  /* USER CODE BEGIN NonMaskableInt_IRQn 1 */
-   while (1)
-  {
-  }
-  /* USER CODE END NonMaskableInt_IRQn 1 */
-}
+/* ========================================================================= */
+/* 硬體周邊中斷處理 (Peripheral ISRs)                                        */
+/* ========================================================================= */
 
 /**
-  * @brief This function handles Hard fault interrupt.
-  */
-void HardFault_Handler(void)
-{
-  /* USER CODE BEGIN HardFault_IRQn 0 */
-
-  /* USER CODE END HardFault_IRQn 0 */
-  while (1)
-  {
-    /* USER CODE BEGIN W1_HardFault_IRQn 0 */
-    /* USER CODE END W1_HardFault_IRQn 0 */
-  }
-}
-
-/**
-  * @brief This function handles Memory management fault.
-  */
-void MemManage_Handler(void)
-{
-  /* USER CODE BEGIN MemoryManagement_IRQn 0 */
-
-  /* USER CODE END MemoryManagement_IRQn 0 */
-  while (1)
-  {
-    /* USER CODE BEGIN W1_MemoryManagement_IRQn 0 */
-    /* USER CODE END W1_MemoryManagement_IRQn 0 */
-  }
-}
-
-/**
-  * @brief This function handles Pre-fetch fault, memory access fault.
-  */
-void BusFault_Handler(void)
-{
-  /* USER CODE BEGIN BusFault_IRQn 0 */
-
-  /* USER CODE END BusFault_IRQn 0 */
-  while (1)
-  {
-    /* USER CODE BEGIN W1_BusFault_IRQn 0 */
-    /* USER CODE END W1_BusFault_IRQn 0 */
-  }
-}
-
-/**
-  * @brief This function handles Undefined instruction or illegal state.
-  */
-void UsageFault_Handler(void)
-{
-  /* USER CODE BEGIN UsageFault_IRQn 0 */
-
-  /* USER CODE END UsageFault_IRQn 0 */
-  while (1)
-  {
-    /* USER CODE BEGIN W1_UsageFault_IRQn 0 */
-    /* USER CODE END W1_UsageFault_IRQn 0 */
-  }
-}
-
-/**
-  * @brief This function handles System service call via SWI instruction.
-  */
-/*
-void SVC_Handler(void)
-{
-  USER CODE BEGIN SVCall_IRQn 0
-  USER CODE END SVCall_IRQn 0
-  USER CODE BEGIN SVCall_IRQn 1
-  USER CODE END SVCall_IRQn 1
-}
-*/
-/**
-  * @brief This function handles Debug monitor.
-  */
-void DebugMon_Handler(void)
-{
-  /* USER CODE BEGIN DebugMonitor_IRQn 0 */
-
-  /* USER CODE END DebugMonitor_IRQn 0 */
-  /* USER CODE BEGIN DebugMonitor_IRQn 1 */
-
-  /* USER CODE END DebugMonitor_IRQn 1 */
-}
-
-/**
-  * @brief This function handles Pendable request for system service.
-  */
-/*
-void PendSV_Handler(void)
-{
-  USER CODE BEGIN PendSV_IRQn 0
-  USER CODE END PendSV_IRQn 0
-  USER CODE BEGIN PendSV_IRQn 1
-  USER CODE END PendSV_IRQn 1
-}
-*/
-
-/**
-  * @brief This function handles System tick timer.
-  */
-/*
-void SysTick_Handler(void)
-{
-  USER CODE BEGIN SysTick_IRQn 0
-  USER CODE END SysTick_IRQn 0
-  HAL_IncTick();
-  USER CODE BEGIN SysTick_IRQn 1
-  USER CODE END SysTick_IRQn 1
-}
-*/
-
-/******************************************************************************/
-/* STM32F4xx Peripheral Interrupt Handlers                                    */
-/* Add here the Interrupt Handlers for the used peripherals.                  */
-/* For the available peripheral interrupt handler names,                      */
-/* please refer to the startup file (startup_stm32f4xx.s).                    */
-/******************************************************************************/
-
-/**
-  * @brief This function handles USART2 global interrupt.
+  * @brief  USART2 全域中斷 (結合 DMA 與 Idle Line 實作無鎖接收)
   */
 void USART2_IRQHandler(void)
 {
-  /* USER CODE BEGIN USART2_IRQn 0 */
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
-  /* USER CODE END USART2_IRQn 0 */
-  HAL_UART_IRQHandler(&huart2);
-  /* USER CODE BEGIN USART2_IRQn 1 */
+    // 檢查是否為 IDLE (線路閒置) 中斷，代表一整句指令接收完畢
+    if (USART2->SR & USART_SR_IDLE) {
+        
+        // 1. 清除 IDLE 旗標：先讀取 SR，再讀取 DR (暫存器硬體規定)
+        volatile uint32_t tmp = USART2->SR;
+        tmp = USART2->DR;
+        (void)tmp;
 
-  /* USER CODE END USART2_IRQn 1 */
+        // 2. 暫停 DMA 以讀取剩餘計數
+        DMA1_Stream5->CR &= ~DMA_SxCR_EN; // 關閉 DMA
+        
+        // 3. 計算這次實際收到了幾個 Bytes (總長度 - 剩餘次數)
+        uint16_t rx_len = 128 - DMA1_Stream5->NDTR; 
+
+        // 4. 將 DMA 緩衝區的資料一口氣推入軟體 Ring Buffer
+        for(uint16_t i = 0; i < rx_len; i++) {
+            RingBuffer_Put(&uart_rx_buffer, dma_rx_buffer[i]);
+        }
+
+        // 5. 發送任務通知 (Task Notification)，喚醒 CLI_Task 進行解析
+        if (xCLITaskHandle != NULL) {
+            vTaskNotifyGiveFromISR(xCLITaskHandle, &xHigherPriorityTaskWoken);
+        }
+
+        // 6. 歸零 DMA 傳輸數量，並重新啟動 DMA 準備接下一句話
+        DMA1_Stream5->NDTR = 128;
+        DMA1_Stream5->CR |= DMA_SxCR_EN;
+    }
+
+    // FreeRTOS ISR 標準結尾：若有更高優先級任務被喚醒，則立即觸發 Context Switch
+    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
-
-/**
-  * @brief This function handles TIM6 global interrupt and DAC1, DAC2 underrun error interrupts.
-  */
-void TIM6_DAC_IRQHandler(void)
-{
-  /* USER CODE BEGIN TIM6_DAC_IRQn 0 */
-
-  /* USER CODE END TIM6_DAC_IRQn 0 */
-  HAL_TIM_IRQHandler(&htim6);
-  /* USER CODE BEGIN TIM6_DAC_IRQn 1 */
-
-  /* USER CODE END TIM6_DAC_IRQn 1 */
-}
-
-/* USER CODE BEGIN 1 */
-
-/* USER CODE END 1 */
